@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Sessao server-side. O cookie carrega o token BRUTO; guardamos so o hash
--- (HMAC-SHA256 com SECRET_KEY como pepper). Vazamento do banco nao expoe
+-- Sessao server-side. O cookie carrega o token BRUTO e guardamos apenas o
+-- hash (HMAC-SHA256 com SECRET_KEY como pepper). Vazamento do banco nao expoe
 -- tokens utilizaveis.
 CREATE TABLE IF NOT EXISTS sessions (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
