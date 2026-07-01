@@ -60,8 +60,9 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-# Garante que segredos placeholder não passem despercebidos
-if grep -qE 'CHANGE_?ME|your_?secret|placeholder' .env; then
+# Garante que segredos placeholder não passem despercebidos.
+# Ignora comentários (linhas iniciadas por #) e linhas em branco.
+if grep -vE '^[[:space:]]*(#|$)' .env | grep -qE 'CHANGE_?ME|your_?secret|placeholder'; then
   err ".env ainda contém valores placeholder. Preencha antes de subir."
   exit 1
 fi
