@@ -16,9 +16,9 @@ export async function mount(root, opts = {}) {
   const boardUrl = opts.boardUrl || "/board";
 
   clear(root);
-  const daily = column("Diário", readOnly ? null : () => openRecurring(null));
-  const wip = column("Em andamento", readOnly ? null : () => openWorklog(null));
-  const done = column("Finalizado", null);
+  const daily = column("Tarefas Recorrentes Diárias", readOnly ? null : () => openRecurring(null));
+  const wip = column("Tarefas Pontuais", readOnly ? null : () => openWorklog(null));
+  const done = column("Tarefas Finalizadas", null);
   root.append(h("div", { class: "columns" }, daily.section, wip.section, done.section));
 
   async function refresh() {

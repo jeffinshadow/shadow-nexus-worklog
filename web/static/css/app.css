@@ -79,6 +79,8 @@ input:focus, select:focus, textarea:focus {
   z-index: 10;
 }
 .topbar h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+.brand-logo { height: 32px; width: auto; display: block; }
+.auth-logo { height: 56px; width: auto; display: block; margin: 0 auto 12px; }
 .spacer { flex: 1; }
 .topbar .who { font-size: 0.85rem; color: var(--on-surface-variant); }
 
@@ -92,7 +94,7 @@ input:focus, select:focus, textarea:focus {
 }
 .tabs button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
 
-main { padding: 20px; max-width: 1200px; margin: 0 auto; }
+main { padding: 20px; max-width: min(1600px, 95vw); margin: 0 auto; }
 
 /* ---- Board ---- */
 .columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); align-items: start; }
@@ -145,8 +147,17 @@ main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .metric h3 { margin: 0 0 12px; font-size: 0.9rem; color: var(--on-surface-variant); font-weight: 500; }
 .metric .value { font-size: 2rem; font-weight: 600; }
 .metric .value small { font-size: 1rem; color: var(--on-surface-variant); }
-.bar { height: 8px; border-radius: 999px; background: var(--surface-container-high); margin-top: 12px; overflow: hidden; }
-.bar > span { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+/* Fileiras rotuladas do dashboard (grupo A / grupo B) */
+.dash-group { margin-bottom: 24px; }
+.dash-group-title { font-size: 1rem; font-weight: 600; margin: 0 0 12px; }
+
+/* Gráficos de pizza (SVG puro) do dashboard */
+.pie-svg { display: block; margin: 4px auto 8px; max-width: 100%; height: auto; }
+.pie-caption { text-align: center; }
+.pie-pct { font-size: 1.4rem; font-weight: 600; }
+.pie-legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-top: 12px; font-size: 0.8rem; color: var(--on-surface-variant); }
+.pie-legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.pie-legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--outline-variant); }
 
 /* ---- Relatorios ---- */
 .report-controls { display: flex; gap: var(--gap-s); align-items: end; margin-bottom: var(--gap); flex-wrap: wrap; }

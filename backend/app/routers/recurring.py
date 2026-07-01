@@ -30,8 +30,18 @@ def update(task_id: int, data: RecurringUpdate, user=Depends(active_user_csrf)):
         fields.append("label = %s")
         values.append(data.label)
     if data.active is not None:
-        fields.append("active = %s")
-        values.append(data.active)
+        if data.active:
+            # Reativar: a vigência RECOMEÇA agora. created_at avança para now()
+            # (só na transição inativa->ativa) para que os dias em que ficou
+            # desativada não voltem a gerar slots retroativos no dashboard.
+            fields.append("active = true")
+            fields.append("deactivated_at = NULL")
+            fields.append("created_at = CASE WHEN active THEN created_at ELSE now() END")
+        else:
+            # Desativar: grava a data só na transição ativa->inativa (preserva a
+            # data original se já estava inativa).
+            fields.append("active = false")
+            fields.append("deactivated_at = CASE WHEN active THEN now() ELSE deactivated_at END")
     if data.position is not None:
         fields.append("position = %s")
         values.append(data.position)
@@ -50,9 +60,13 @@ def update(task_id: int, data: RecurringUpdate, user=Depends(active_user_csrf)):
 
 @router.delete("/{task_id}")
 def deactivate(task_id: int, user=Depends(active_user_csrf)):
-    # Soft-delete: preserva o historico em recurring_completions.
+    # Soft-delete = desativar: preserva o historico em recurring_completions e
+    # marca deactivated_at (so na transicao ativa->inativa).
     updated = db.execute(
-        "UPDATE recurring_tasks SET active = false WHERE id = %s AND user_id = %s",
+        """UPDATE recurring_tasks
+              SET active = false,
+                  deactivated_at = CASE WHEN active THEN now() ELSE deactivated_at END
+            WHERE id = %s AND user_id = %s""",
         (task_id, user["user_id"]),
     )
     if not updated:

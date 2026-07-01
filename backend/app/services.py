@@ -57,37 +57,111 @@ def get_board(user_id: int) -> dict:
     return {"recurring": recurring, "in_progress": in_progress, "done": done}
 
 
-def _completions_between(user_id: int, start: date, end: date) -> int:
-    row = db.query_one(
-        """
-        SELECT count(*) AS n
-          FROM recurring_completions c
-          JOIN recurring_tasks r ON r.id = c.task_id
-         WHERE c.user_id = %s AND r.active = true
-           AND c.completed_date BETWEEN %s AND %s
-        """,
-        (user_id, start, end),
+# Datas de referência (hoje / início da semana=DOMINGO / início do mês) no fuso
+# da aplicação. EXTRACT(DOW) usa domingo=0, então week_start = today - DOW
+# (evita o date_trunc('week') do Postgres, que começaria na segunda).
+_REF_DATES = """
+    WITH p AS (
+        SELECT
+            d.today,
+            d.today - CAST(EXTRACT(DOW FROM d.today) AS int) AS week_start,
+            date_trunc('month', d.today)::date               AS month_start
+        FROM (SELECT (now() AT TIME ZONE %(tz)s)::date AS today) d
     )
-    return row["n"]
+"""
+
+# Grupo A — recorrentes. Um "slot" = (uma recorrente vigente em um dia D do
+# período). Vigência de cada tarefa = [start_d, end_d]:
+#   start_d = created_at::date  (no fuso da app)
+#   end_d   = COALESCE(deactivated_at::date, hoje)   (inclusive)
+# Assim: tarefa ativa conta até hoje; tarefa desativada conta só até o dia da
+# desativação (dias posteriores NÃO geram slots); tarefa criada no meio do
+# período não infla dias anteriores à criação.
+#
+# Denominador (slots) = soma, por tarefa, dos dias do período ∩ [start_d, end_d].
+# Numerador (done) = completions cujo dia caiu DENTRO da vigência da tarefa —
+# NÃO filtramos por `active` de hoje, senão o histórico de tarefas desativadas
+# sumiria. (Toda completion foi criada num dia em que a tarefa estava vigente.)
+#
+# Reativação: o endpoint zera deactivated_at e AVANÇA created_at para agora, ou
+# seja a vigência recomeça — os dias mortos não voltam ao denominador nem as
+# completions antigas ao numerador (ver recurring.py).
+#
+# LEAST(week_start, month_start): no início do mês a semana atual pode começar
+# no mês anterior; a janela de busca precisa cobrir semana E mês.
+_DASH_RECURRING_SQL = _REF_DATES + """
+    , tw AS (
+        SELECT
+            r.id,
+            (r.created_at AT TIME ZONE %(tz)s)::date AS start_d,
+            COALESCE((r.deactivated_at AT TIME ZONE %(tz)s)::date, p.today) AS end_d
+          FROM p, recurring_tasks r
+         WHERE r.user_id = %(uid)s
+    ),
+    slots AS (
+        SELECT
+            COALESCE(SUM(GREATEST(LEAST(p.today, tw.end_d) - GREATEST(p.today,       tw.start_d) + 1, 0)), 0)::int AS day_slots,
+            COALESCE(SUM(GREATEST(LEAST(p.today, tw.end_d) - GREATEST(p.week_start,  tw.start_d) + 1, 0)), 0)::int AS week_slots,
+            COALESCE(SUM(GREATEST(LEAST(p.today, tw.end_d) - GREATEST(p.month_start, tw.start_d) + 1, 0)), 0)::int AS month_slots
+          FROM p, tw
+    ),
+    done AS (
+        SELECT
+            count(*) FILTER (WHERE c.completed_date =  p.today)::int       AS day_done,
+            count(*) FILTER (WHERE c.completed_date >= p.week_start)::int  AS week_done,
+            count(*) FILTER (WHERE c.completed_date >= p.month_start)::int AS month_done
+          FROM p
+          LEFT JOIN (recurring_completions c JOIN tw ON tw.id = c.task_id)
+                 ON c.user_id = %(uid)s
+                AND c.completed_date BETWEEN LEAST(p.week_start, p.month_start) AND p.today
+                AND c.completed_date BETWEEN tw.start_d AND tw.end_d
+    )
+    SELECT
+        done.day_done,
+        GREATEST(slots.day_slots   - done.day_done,   0) AS day_open,
+        done.week_done,
+        GREATEST(slots.week_slots  - done.week_done,  0) AS week_open,
+        done.month_done,
+        GREATEST(slots.month_slots - done.month_done, 0) AS month_open
+      FROM p, slots, done
+"""
+
+# Grupo B — pontuais. Concluído = worklog 'done' com completed_at no período
+# (no fuso da app). "Em aberto" = backlog atual (status <> 'done'), igual para
+# os três períodos por definição (escolha documentada).
+_DASH_PONTUAL_SQL = _REF_DATES + """
+    SELECT
+        (SELECT count(*) FROM worklog_tasks
+          WHERE user_id = %(uid)s AND status <> 'done')::int AS open_now,
+        count(*) FILTER (WHERE (w.completed_at AT TIME ZONE %(tz)s)::date =  p.today)::int       AS day_done,
+        count(*) FILTER (WHERE (w.completed_at AT TIME ZONE %(tz)s)::date >= p.week_start)::int  AS week_done,
+        count(*) FILTER (WHERE (w.completed_at AT TIME ZONE %(tz)s)::date >= p.month_start)::int AS month_done
+      FROM p
+      LEFT JOIN worklog_tasks w
+             ON w.user_id = %(uid)s
+            AND w.status = 'done'
+            AND w.completed_at IS NOT NULL
+            -- LEAST: cobre também a semana atual quando ela começa no mês anterior.
+            AND (w.completed_at AT TIME ZONE %(tz)s)::date
+                BETWEEN LEAST(p.week_start, p.month_start) AND p.today
+"""
 
 
 def get_dashboard(user_id: int) -> dict:
-    today = app_today()
-    ws = week_start(today)
-    ms = today.replace(day=1)
-
-    total_active = db.query_one(
-        "SELECT count(*) AS n FROM recurring_tasks WHERE user_id = %s AND active = true",
-        (user_id,),
-    )["n"]
-
-    week_days = (today - ws).days + 1
-    month_days = (today - ms).days + 1
-
+    params = {"uid": user_id, "tz": config.APP_TZ}
+    a = db.query_one(_DASH_RECURRING_SQL, params)
+    b = db.query_one(_DASH_PONTUAL_SQL, params)
     return {
-        "today": {"done": _completions_between(user_id, today, today), "total": total_active},
-        "week": {"done": _completions_between(user_id, ws, today), "total": total_active * week_days},
-        "month": {"done": _completions_between(user_id, ms, today), "total": total_active * month_days},
+        "recurring": {
+            "day":   {"done": a["day_done"],   "open": a["day_open"]},
+            "week":  {"done": a["week_done"],  "open": a["week_open"]},
+            "month": {"done": a["month_done"], "open": a["month_open"]},
+        },
+        "pontual": {
+            "day":   {"done": b["day_done"],   "open": b["open_now"]},
+            "week":  {"done": b["week_done"],  "open": b["open_now"]},
+            "month": {"done": b["month_done"], "open": b["open_now"]},
+        },
     }
 
 

@@ -1,0 +1,35 @@
+# Suíte de testes contra Postgres REAL, efêmero. Uso:
+#   docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+#   docker compose -f docker-compose.test.yml down -v
+# O banco usa tmpfs (some ao parar); nenhum dado real é tocado.
+
+services:
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: nexus_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d nexus_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  tests:
+    build: ./backend
+    user: root
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements-dev.txt && pytest -v"
+    environment:
+      DATABASE_URL: postgresql://test:test@test-db:5432/nexus_test
+      SECRET_KEY: test-secret-key
+      APP_TZ: America/Sao_Paulo
+      COOKIE_SECURE: "false"
+    depends_on:
+      test-db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
