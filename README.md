@@ -148,35 +148,6 @@ monte `./tunnel` no container e troque o `command` do serviço `tunnel`.
 - Postgres sem porta no host; backend sem exposição pública; docs da API
   desabilitadas.
 
-## Testes
-
-A suíte roda contra um **PostgreSQL real** (não SQLite/mock), porque as
-agregações usam recursos específicos do Postgres (`EXTRACT(DOW)`, `FILTER`,
-`AT TIME ZONE`). O banco de teste é efêmero; nenhum dado real é tocado.
-
-**Opção 1 — Docker (recomendada):**
-
-```bash
-docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
-docker compose -f docker-compose.test.yml down -v
-```
-
-**Opção 2 — Postgres próprio:** aponte `TEST_DATABASE_URL` para um banco de
-teste descartável e rode o pytest:
-
-```bash
-cd backend
-pip install -r requirements.txt -r requirements-dev.txt
-export TEST_DATABASE_URL="postgresql://user:pass@host:5432/nexus_test"
-pytest -v
-```
-
-Cobertura: isolamento por usuário (board/dashboard/relatórios só do dono),
-403 para usuário comum em rotas de admin, admin lendo dados do usuário-alvo,
-correção do Grupo A (janela de vigência por `created_at`, incluindo regressão
-do bug de denominador), Grupo B (períodos + conversão de fuso), e fronteira de
-semana domingo→sábado.
-
 ## Modelo de dados
 
 `users`, `sessions`, `recurring_tasks`, `recurring_completions`, `worklog_tasks`

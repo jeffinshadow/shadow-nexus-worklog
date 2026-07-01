@@ -35,20 +35,25 @@ function groupRow(title, g) {
 
 function pieCard(title, done, open) {
   const total = done + open;
-  const frac = total ? done / total : 0;
+  const empty = total === 0; // período sem tarefas: banco vazio não pode quebrar
+  const frac = empty ? 0 : done / total;
   const pct = Math.round(frac * 100);
+
+  const caption = empty
+    ? h("span", { class: "pie-empty", text: "sem dados" })
+    : h(
+        "span",
+        {},
+        h("span", { class: "pie-pct", text: pct + "%" }),
+        h("span", { text: " concluídas" })
+      );
 
   return h(
     "div",
     { class: "metric" },
     h("h3", { text: title }),
-    buildPie(frac),
-    h(
-      "div",
-      { class: "pie-caption" },
-      h("span", { class: "pie-pct", text: pct + "%" }),
-      h("span", { text: " concluídas" })
-    ),
+    empty ? emptyPie() : buildPie(frac),
+    h("div", { class: "pie-caption" }, caption),
     h(
       "div",
       { class: "pie-legend" },
@@ -64,25 +69,40 @@ function legendItem(label, count, color) {
   return h("span", { class: "item" }, swatch, `${label}: ${count}`);
 }
 
-function buildPie(frac) {
-  const size = 140;
-  const r = 60;
-  const c = size / 2;
+const SIZE = 140;
+const R = 60;
+const C = SIZE / 2;
 
+function makeSvg(label) {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("class", "pie-svg");
-  svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
-  svg.setAttribute("width", String(size));
-  svg.setAttribute("height", String(size));
+  svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
+  svg.setAttribute("width", String(SIZE));
+  svg.setAttribute("height", String(SIZE));
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `${Math.round(frac * 100)}% concluídas`);
+  svg.setAttribute("aria-label", label);
+  return svg;
+}
 
-  if (frac <= 0) svg.appendChild(circle(c, r, OPEN_COLOR));
-  else if (frac >= 1) svg.appendChild(circle(c, r, DONE_COLOR));
+function buildPie(frac) {
+  const svg = makeSvg(`${Math.round(frac * 100)}% concluídas`);
+  if (frac <= 0) svg.appendChild(circle(C, R, OPEN_COLOR));
+  else if (frac >= 1) svg.appendChild(circle(C, R, DONE_COLOR));
   else {
-    svg.appendChild(slice(c, r, 0, frac, DONE_COLOR));
-    svg.appendChild(slice(c, r, frac, 1, OPEN_COLOR));
+    svg.appendChild(slice(C, R, 0, frac, DONE_COLOR));
+    svg.appendChild(slice(C, R, frac, 1, OPEN_COLOR));
   }
+  return svg;
+}
+
+// Estado vazio: círculo neutro com contorno (não confundir com "0% concluído,
+// tudo em aberto"). Nunca lança exceção — o banco começa sem tarefas.
+function emptyPie() {
+  const svg = makeSvg("sem dados");
+  const el = circle(C, R, "var(--surface-container-high)");
+  el.style.stroke = "var(--outline-variant)";
+  el.style.strokeWidth = "2";
+  svg.appendChild(el);
   return svg;
 }
 
