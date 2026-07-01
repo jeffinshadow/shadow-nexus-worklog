@@ -110,7 +110,11 @@ O repositório versiona apenas `.env.example` e `tunnel/config.example.yml` com
    do túnel apontando o serviço para `http://web:80`.
 4. `docker compose up -d --build`. O `cloudflared` conecta pela rede interna ao
    nginx; nenhuma porta pública é aberta na VM.
-5. Atualizações: `git pull && docker compose up -d --build`.
+5. Atualizações: `./deploy.sh` (verifica dependências, `git pull --ff-only`,
+   rebuild e mostra o estado dos serviços). Na primeira vez, numa VM limpa
+   Debian/Ubuntu, use `./deploy.sh --install` para instalar Docker/Git via
+   repositório oficial. O script recusa subir se o `.env` ainda tiver
+   placeholders `CHANGEME`.
 
 ### Cloudflare Access (opcional, camada extra)
 

@@ -1,0 +1,5 @@
+# Scripts shell precisam de LF sempre (deploy roda em Linux).
+*.sh text eol=lf
+
+# Fontes binarias nao devem sofrer normalizacao de fim de linha.
+*.woff2 binary
