@@ -1,0 +1,86 @@
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from .. import db
+from ..deps import active_user_csrf
+from ..schemas import WorklogIn, WorklogUpdate
+
+router = APIRouter(prefix="/api/worklog", tags=["worklog"])
+
+
+@router.post("", status_code=201)
+def create(data: WorklogIn, user=Depends(active_user_csrf)):
+    completed_at = datetime.now(timezone.utc) if data.status == "done" else None
+    row = db.query_one(
+        """
+        INSERT INTO worklog_tasks (user_id, title, description, status, due_date, completed_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id
+        """,
+        (user["user_id"], data.title, data.description, data.status, data.due_date, completed_at),
+    )
+    return {"id": row["id"]}
+
+
+@router.patch("/{task_id}")
+def update(task_id: int, data: WorklogUpdate, user=Depends(active_user_csrf)):
+    current = db.query_one(
+        "SELECT completed_at FROM worklog_tasks WHERE id = %s AND user_id = %s",
+        (task_id, user["user_id"]),
+    )
+    if not current:
+        raise HTTPException(status_code=404, detail="nao encontrado")
+
+    fields, values = [], []
+    if data.title is not None:
+        fields.append("title = %s")
+        values.append(data.title)
+    if data.description is not None:
+        fields.append("description = %s")
+        values.append(data.description)
+    if data.due_date is not None:
+        fields.append("due_date = %s")
+        values.append(data.due_date)
+    if data.status is not None:
+        fields.append("status = %s")
+        values.append(data.status)
+        if data.status == "done" and current["completed_at"] is None:
+            fields.append("completed_at = %s")
+            values.append(datetime.now(timezone.utc))
+        elif data.status != "done":
+            fields.append("completed_at = NULL")
+
+    if not fields:
+        raise HTTPException(status_code=400, detail="nada para atualizar")
+
+    values += [task_id, user["user_id"]]
+    db.execute(
+        f"UPDATE worklog_tasks SET {', '.join(fields)} WHERE id = %s AND user_id = %s",
+        tuple(values),
+    )
+    return {"ok": True}
+
+
+@router.post("/{task_id}/finish")
+def finish(task_id: int, user=Depends(active_user_csrf)):
+    updated = db.execute(
+        """UPDATE worklog_tasks
+              SET status = 'done', completed_at = COALESCE(completed_at, now())
+            WHERE id = %s AND user_id = %s""",
+        (task_id, user["user_id"]),
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="nao encontrado")
+    return {"ok": True}
+
+
+@router.delete("/{task_id}")
+def delete(task_id: int, user=Depends(active_user_csrf)):
+    deleted = db.execute(
+        "DELETE FROM worklog_tasks WHERE id = %s AND user_id = %s",
+        (task_id, user["user_id"]),
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="nao encontrado")
+    return {"ok": True}

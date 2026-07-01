@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shadow Nexus Worklog</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <!-- Sprite de icones (Material Symbols, apenas os usados). SVG inline e
+       permitido pela CSP; nao ha script/style inline. -->
+  <svg class="hidden" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></symbol>
+    <symbol id="icon-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></symbol>
+    <symbol id="icon-delete" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
+    <symbol id="icon-logout" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></symbol>
+    <symbol id="icon-theme" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <h1>Shadow Nexus</h1>
+    <div class="spacer"></div>
+    <span class="who" id="who"></span>
+    <button class="icon" id="btn-theme" title="Alternar tema" aria-label="Alternar tema">
+      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-theme"></use></svg>
+    </button>
+    <button class="icon" id="btn-logout" title="Sair" aria-label="Sair">
+      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-logout"></use></svg>
+    </button>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist">
+    <button role="tab" data-view="board" aria-selected="true">Board</button>
+    <button role="tab" data-view="reports" aria-selected="false">Relatórios</button>
+    <button role="tab" data-view="dashboard" aria-selected="false">Dashboard</button>
+    <button role="tab" data-view="admin" aria-selected="false" id="tab-admin" class="hidden">Admin</button>
+  </nav>
+
+  <main>
+    <section id="view-change-password" class="hidden">
+      <div class="auth-card">
+        <h2>Troque sua senha</h2>
+        <p class="sub">É obrigatório definir uma nova senha antes de continuar.</p>
+        <form id="form-change-password">
+          <div class="field">
+            <label for="cp-current">Senha atual</label>
+            <input id="cp-current" type="password" required autocomplete="current-password">
+          </div>
+          <div class="field">
+            <label for="cp-new">Nova senha (mínimo 10 caracteres)</label>
+            <input id="cp-new" type="password" required minlength="10" autocomplete="new-password">
+          </div>
+          <p class="error-text" id="cp-error"></p>
+          <button class="full" type="submit">Salvar nova senha</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="view-board"></section>
+    <section id="view-reports" class="hidden"></section>
+    <section id="view-dashboard" class="hidden"></section>
+    <section id="view-admin" class="hidden"></section>
+  </main>
+
+  <!-- Dialogos (usados apenas na visao propria; admin e somente leitura) -->
+  <dialog id="dialog-recurring">
+    <h2 id="dlg-rec-title">Recorrente</h2>
+    <form id="form-recurring">
+      <div class="field">
+        <label for="rec-label">Rótulo</label>
+        <input id="rec-label" type="text" required maxlength="200">
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="danger hidden" id="rec-delete">Remover</button>
+        <div class="spacer"></div>
+        <button type="button" class="text" id="rec-cancel">Cancelar</button>
+        <button type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialog-worklog">
+    <h2 id="dlg-wl-title">Tarefa</h2>
+    <form id="form-worklog">
+      <div class="field">
+        <label for="wl-title">Título</label>
+        <input id="wl-title" type="text" required maxlength="200">
+      </div>
+      <div class="field">
+        <label for="wl-desc">Descrição (uma linha)</label>
+        <input id="wl-desc" type="text" maxlength="300">
+      </div>
+      <div class="field">
+        <label for="wl-status">Status</label>
+        <select id="wl-status">
+          <option value="todo">A fazer</option>
+          <option value="in_progress">Em andamento</option>
+          <option value="blocked">Bloqueado</option>
+          <option value="done">Concluído</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="wl-due">Previsão de conclusão</label>
+        <input id="wl-due" type="date">
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="danger hidden" id="wl-delete">Excluir</button>
+        <div class="spacer"></div>
+        <button type="button" class="text" id="wl-cancel">Cancelar</button>
+        <button type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

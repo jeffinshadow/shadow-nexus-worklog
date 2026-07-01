@@ -1,0 +1,30 @@
+# Segredos / ambiente
+.env
+.env.*
+!.env.example
+
+# Cloudflare Tunnel (credenciais e config com token)
+tunnel/config.yml
+tunnel/*.json
+tunnel/*.pem
+*.pem
+
+# Dados e dumps do Postgres (nunca versionar dados reais)
+pgdata/
+data/
+*.dump
+*.sql.dump
+*.sql.gz
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+
+# Editores / SO
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

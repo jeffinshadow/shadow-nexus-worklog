@@ -1,0 +1,88 @@
+/* Design tokens Material Design 3 (aproximacao) via custom properties.
+   Tema claro por padrao; escuro via prefers-color-scheme e via [data-theme]. */
+
+@font-face {
+  font-family: "Roboto Flex";
+  src: url("/fonts/RobotoFlex.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  font-style: normal;
+}
+
+:root {
+  --font-sans: "Roboto Flex", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+  /* Escala */
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 20px;
+  --gap: 16px;
+  --gap-s: 8px;
+
+  /* Paleta clara (M3) */
+  --primary: #4757c9;
+  --on-primary: #ffffff;
+  --primary-container: #dee1ff;
+  --on-primary-container: #000f5c;
+
+  --surface: #fbf8fd;
+  --surface-container: #f0edf4;
+  --surface-container-high: #e9e6ee;
+  --on-surface: #1b1b21;
+  --on-surface-variant: #46464f;
+  --outline: #77767f;
+  --outline-variant: #c7c5d0;
+
+  --success: #3b6939;
+  --warning: #7a5900;
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --primary: #bcc2ff;
+    --on-primary: #14239b;
+    --primary-container: #2f3fb2;
+    --on-primary-container: #dee1ff;
+
+    --surface: #131318;
+    --surface-container: #1f1f25;
+    --surface-container-high: #292930;
+    --on-surface: #e4e1e9;
+    --on-surface-variant: #c7c5d0;
+    --outline: #91909a;
+    --outline-variant: #46464f;
+
+    --success: #a1d39a;
+    --warning: #f4be48;
+    --error: #ffb4ab;
+    --on-error: #690005;
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --primary: #bcc2ff;
+  --on-primary: #14239b;
+  --primary-container: #2f3fb2;
+  --on-primary-container: #dee1ff;
+
+  --surface: #131318;
+  --surface-container: #1f1f25;
+  --surface-container-high: #292930;
+  --on-surface: #e4e1e9;
+  --on-surface-variant: #c7c5d0;
+  --outline: #91909a;
+  --outline-variant: #46464f;
+
+  --success: #a1d39a;
+  --warning: #f4be48;
+  --error: #ffb4ab;
+  --on-error: #690005;
+
+  color-scheme: dark;
+}

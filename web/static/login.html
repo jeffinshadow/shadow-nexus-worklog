@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shadow Nexus Worklog — Acesso</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h1>Shadow Nexus</h1>
+      <p class="sub">Worklog pessoal</p>
+
+      <div class="auth-tabs" role="tablist">
+        <button id="tab-login" role="tab" aria-selected="true">Entrar</button>
+        <button id="tab-register" role="tab" aria-selected="false">Criar conta</button>
+      </div>
+
+      <form id="form-login" autocomplete="on">
+        <div class="field">
+          <label for="login-email">E-mail</label>
+          <input id="login-email" name="email" type="email" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="login-password">Senha</label>
+          <input id="login-password" name="password" type="password" required autocomplete="current-password">
+        </div>
+        <p class="error-text" id="login-error"></p>
+        <button class="full" type="submit">Entrar</button>
+      </form>
+
+      <form id="form-register" class="hidden" autocomplete="on">
+        <div class="field">
+          <label for="reg-email">E-mail</label>
+          <input id="reg-email" name="email" type="email" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="reg-password">Senha (mínimo 10 caracteres)</label>
+          <input id="reg-password" name="password" type="password" required minlength="10" autocomplete="new-password">
+        </div>
+        <p class="error-text" id="reg-error"></p>
+        <button class="full" type="submit">Criar conta</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/js/login.js"></script>
+</body>
+</html>
