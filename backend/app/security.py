@@ -41,6 +41,16 @@ def new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+# Alfabeto sem caracteres ambiguos (0/O/1/I/l) para uma senha temporaria que o
+# admin repassa e o usuario digita. 12 chars * ~31 simbolos = ~59 bits: forte o
+# suficiente para uma senha de uso unico (o usuario troca no proximo login).
+_TEMP_PW_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
+
+
+def generate_temp_password(length: int = 12) -> str:
+    return "".join(secrets.choice(_TEMP_PW_ALPHABET) for _ in range(length))
+
+
 def token_hash(token: str) -> str:
     # HMAC-SHA256 com SECRET_KEY como pepper (o token vive em claro no cookie).
     return hmac.new(

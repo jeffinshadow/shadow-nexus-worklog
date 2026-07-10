@@ -3,7 +3,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import db
-from ..deps import require_admin
+from ..deps import require_admin, require_admin_csrf
+from ..security import generate_temp_password, hash_password
 from ..services import get_board, get_dashboard
 from .reports import build_pdf_response
 
@@ -45,3 +46,22 @@ def user_report_export(
 ):
     target = _ensure_user(user_id)
     return build_pdf_response(target["email"], user_id, start, end)
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_password(user_id: int, admin=Depends(require_admin_csrf)):
+    """Redefine a senha de um usuario para uma temporaria gerada (mostrada uma
+    unica vez ao admin). Forca troca no proximo login e encerra as sessoes do
+    alvo. Sem envolvimento de e-mail. Para a propria conta, use a troca normal."""
+    if user_id == admin["user_id"]:
+        raise HTTPException(status_code=400, detail="use a troca de senha da sua propria conta")
+    target = _ensure_user(user_id)
+
+    temp = generate_temp_password()
+    db.execute(
+        "UPDATE users SET password_hash = %s, must_change_password = true WHERE id = %s",
+        (hash_password(temp), user_id),
+    )
+    # Encerra TODAS as sessoes do alvo: ele so volta com a senha temporaria.
+    db.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
+    return {"email": target["email"], "temp_password": temp}

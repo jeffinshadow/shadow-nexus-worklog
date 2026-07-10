@@ -10,6 +10,16 @@ const SUBVIEWS = [
   { key: "reports", label: "Relatórios" },
 ];
 
+// Dialogo modal criado dinamicamente (sem markup inline, respeitando a CSP).
+// Remove-se do DOM ao fechar.
+function modal(...children) {
+  const dlg = h("dialog", {}, ...children);
+  document.body.appendChild(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  dlg.showModal();
+  return dlg;
+}
+
 export async function mount(root) {
   clear(root);
   const users = await api.get("/admin/users");
@@ -17,12 +27,19 @@ export async function mount(root) {
     root.append(h("p", { class: "empty", text: "Nenhum usuário." }));
     return;
   }
+  const emailById = new Map(users.map((u) => [String(u.id), u.email]));
 
   const select = h(
     "select",
     {},
     ...users.map((u) => h("option", { value: u.id }, `${u.email}${u.role === "admin" ? " (admin)" : ""}`))
   );
+
+  const resetBtn = h("button", {
+    class: "danger",
+    text: "Redefinir senha",
+    onClick: onReset,
+  });
 
   let active = "board";
   const subtabs = h(
@@ -47,7 +64,8 @@ export async function mount(root) {
     h(
       "div",
       { class: "admin-bar" },
-      h("div", { class: "field" }, h("label", { text: "Usuário" }), select)
+      h("div", { class: "field" }, h("label", { text: "Usuário" }), select),
+      resetBtn
     ),
     subtabs,
     h("p", { class: "readonly-note", text: "Visão somente leitura." }),
@@ -61,6 +79,86 @@ export async function mount(root) {
     else if (active === "dashboard")
       dashboard.mount(content, { dashUrl: `/admin/users/${uid}/dashboard` });
     else reports.mount(content, { exportBase: `/admin/users/${uid}/reports/export` });
+  }
+
+  // ---- Redefinir senha (senha temporária, troca forçada no próximo login) ----
+  function onReset() {
+    const uid = select.value;
+    const email = emailById.get(uid) || "";
+
+    const dlg = modal(
+      h("h2", { text: "Redefinir senha" }),
+      h("p", {}, "Gerar uma senha temporária para ", h("strong", { text: email }), "?"),
+      h("p", {
+        class: "dialog-note",
+        text: "As sessões ativas do usuário serão encerradas e ele precisará definir uma nova senha no próximo login.",
+      }),
+      h(
+        "div",
+        { class: "dialog-actions" },
+        h("button", { class: "text", text: "Cancelar", onClick: () => dlg.close() }),
+        h("button", {
+          class: "danger",
+          text: "Redefinir",
+          onClick: async (ev) => {
+            const b = ev.currentTarget;
+            b.disabled = true;
+            b.textContent = "Gerando...";
+            try {
+              const res = await api.post(`/admin/users/${uid}/reset-password`);
+              dlg.close();
+              showPassword(res.email, res.temp_password);
+            } catch (e) {
+              dlg.close();
+              modal(
+                h("h2", { text: "Erro" }),
+                h("p", { text: e.message || "Falha ao redefinir a senha." }),
+                h("div", { class: "dialog-actions" },
+                  h("button", { text: "Fechar", onClick: (x) => x.currentTarget.closest("dialog").close() })
+                )
+              );
+            }
+          },
+        })
+      )
+    );
+  }
+
+  function showPassword(email, pw) {
+    const box = h("div", { class: "token-box", text: pw });
+    const copyBtn = h("button", {
+      class: "tonal",
+      text: "Copiar",
+      onClick: async () => {
+        try {
+          await navigator.clipboard.writeText(pw);
+          copyBtn.textContent = "Copiado!";
+        } catch {
+          const range = document.createRange();
+          range.selectNodeContents(box);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          copyBtn.textContent = "Selecione e copie";
+        }
+      },
+    });
+
+    const dlg = modal(
+      h("h2", { text: "Senha temporária" }),
+      h("p", {}, "Usuário: ", h("strong", { text: email })),
+      box,
+      h("p", {
+        class: "dialog-note",
+        text: "Repasse agora — não será exibida novamente. O usuário deverá trocá-la no próximo login.",
+      }),
+      h(
+        "div",
+        { class: "dialog-actions" },
+        copyBtn,
+        h("button", { text: "Fechar", onClick: () => dlg.close() })
+      )
+    );
   }
 
   select.addEventListener("change", renderCurrent);

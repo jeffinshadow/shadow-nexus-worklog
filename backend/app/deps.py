@@ -107,6 +107,13 @@ def require_admin(request: Request) -> dict:
     return session
 
 
+def require_admin_csrf(request: Request) -> dict:
+    """Admin + CSRF: para mutacoes em /api/admin/*."""
+    session = require_admin(request)
+    _check_csrf(request, session)
+    return session
+
+
 def effective_user_id(session: dict, as_user: int | None) -> int:
     """Resolve o user_id alvo de uma consulta. Unico caminho para acessar
     dados de outro usuario, e so para admin."""
