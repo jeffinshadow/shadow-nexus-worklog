@@ -104,16 +104,20 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 3px solid transparent;
 }
 .tabs button:hover { color: var(--on-surface); background: var(--surface-container-high); }
-.tabs .inline-icon { width: 24px; height: 24px; }
+.tabs .inline-icon { width: 28px; height: 28px; }
 .tabs button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
 
-/* Mobile: a barra vira flex; o menu desce para uma 2ª linha centralizada e o
-   e-mail some para não estourar a largura. */
+/* Mobile: tudo numa barra só -> logo (sem o titulo) | icones centrais | acoes.
+   Titulo e e-mail somem para caber; icones ficam um pouco maiores. */
 @media (max-width: 760px) {
-  .topbar { display: flex; flex-wrap: wrap; align-items: center; min-height: 0; row-gap: 6px; }
-  .topbar-brand { flex: 1 1 auto; }
+  .topbar { display: flex; flex-wrap: nowrap; align-items: center; min-height: 0; gap: 8px; }
+  .topbar-brand { flex: 0 0 auto; }
+  .topbar h1 { display: none; }
+  .tabs { flex: 1 1 auto; min-width: 0; justify-content: center; }
+  .tabs button { padding: 8px 10px; }
+  .tabs .inline-icon { width: 30px; height: 30px; }
   .topbar-actions { flex: 0 0 auto; }
-  .tabs { order: 3; flex: 1 1 100%; justify-content: center; flex-wrap: wrap; }
+  .topbar-actions .inline-icon { width: 26px; height: 26px; }
   .topbar .who { display: none; }
 }
 
