@@ -5,7 +5,7 @@ sao as rotas (proprio usuario, ou alvo validado por require_admin). Assim a
 mesma logica serve tanto o usuario comum quanto a visao de admin.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from . import db
@@ -14,12 +14,6 @@ from .config import config
 
 def app_today() -> date:
     return datetime.now(ZoneInfo(config.APP_TZ)).date()
-
-
-def week_start(ref: date) -> date:
-    # Semana comeca no DOMINGO. Python: Monday=0..Sunday=6.
-    days_since_sunday = (ref.weekday() + 1) % 7
-    return ref - timedelta(days=days_since_sunday)
 
 
 def get_board(user_id: int) -> dict:
@@ -165,33 +159,94 @@ def get_dashboard(user_id: int) -> dict:
     }
 
 
-def get_weekly_report(user_id: int, ref: date) -> dict:
-    ws = week_start(ref)
-    we = ws + timedelta(days=6)
+def get_report_range(user_id: int, start: date, end: date) -> dict:
+    """Dados do 'Relatorio Worklog' para extracao em PDF, dia a dia.
 
-    recurring = db.query_all(
+    So entram DIAS COM ATIVIDADE = houve alguma recorrente concluida OU alguma
+    pontual concluida naquele dia. Em cada dia listamos as recorrentes VIGENTES
+    naquele dia (concluidas e nao concluidas) e as pontuais concluidas no dia.
+
+    Vigencia de cada recorrente = [start_d, end_d] (no fuso da app):
+      start_d = created_at::date;  end_d = COALESCE(deactivated_at::date, hoje).
+    'end' e limitado a hoje pela rota (sem dias futuros).
+    """
+    tz = config.APP_TZ
+
+    tasks = db.query_all(
         """
-        SELECT r.label, c.completed_date
-          FROM recurring_completions c
-          JOIN recurring_tasks r ON r.id = c.task_id
-         WHERE c.user_id = %s AND c.completed_date BETWEEN %s AND %s
-         ORDER BY c.completed_date, r.label
+        SELECT r.id, r.label,
+               (r.created_at AT TIME ZONE %s)::date AS start_d,
+               COALESCE((r.deactivated_at AT TIME ZONE %s)::date,
+                        (now() AT TIME ZONE %s)::date) AS end_d
+          FROM recurring_tasks r
+         WHERE r.user_id = %s
+         ORDER BY r.position, r.id
         """,
-        (user_id, ws, we),
+        (tz, tz, tz, user_id),
+    )
+    completions = db.query_all(
+        """
+        SELECT task_id, completed_date
+          FROM recurring_completions
+         WHERE user_id = %s AND completed_date BETWEEN %s AND %s
+        """,
+        (user_id, start, end),
     )
     worklog = db.query_all(
         """
-        SELECT title, description, completed_at
+        SELECT title, description,
+               (completed_at AT TIME ZONE %s)::date AS done_date
           FROM worklog_tasks
-         WHERE user_id = %s AND status = 'done'
+         WHERE user_id = %s AND status = 'done' AND completed_at IS NOT NULL
            AND (completed_at AT TIME ZONE %s)::date BETWEEN %s AND %s
          ORDER BY completed_at
         """,
-        (user_id, config.APP_TZ, ws, we),
+        (tz, user_id, tz, start, end),
     )
+
+    done_by_date: dict[date, set[int]] = {}
+    for c in completions:
+        done_by_date.setdefault(c["completed_date"], set()).add(c["task_id"])
+    pont_by_date: dict[date, list] = {}
+    for w in worklog:
+        pont_by_date.setdefault(w["done_date"], []).append(
+            {"title": w["title"], "description": w["description"]}
+        )
+
+    active_dates = sorted(set(done_by_date) | set(pont_by_date))
+
+    days = []
+    total_done = total_slots = total_pont = 0
+    for d in active_dates:
+        done_ids = done_by_date.get(d, set())
+        rec = [
+            {"label": t["label"], "done": t["id"] in done_ids}
+            for t in tasks
+            if t["start_d"] <= d <= t["end_d"]
+        ]
+        n_done = sum(1 for r in rec if r["done"])
+        pont = pont_by_date.get(d, [])
+        days.append(
+            {
+                "date": d,
+                "recurring": rec,
+                "recurring_done": n_done,
+                "recurring_total": len(rec),
+                "pontual": pont,
+            }
+        )
+        total_done += n_done
+        total_slots += len(rec)
+        total_pont += len(pont)
+
     return {
-        "week_start": ws,
-        "week_end": we,
-        "recurring": recurring,
-        "worklog": worklog,
+        "start": start,
+        "end": end,
+        "days": days,
+        "summary": {
+            "recurring_done": total_done,
+            "recurring_total": total_slots,
+            "pontual_done": total_pont,
+            "active_days": len(days),
+        },
     }

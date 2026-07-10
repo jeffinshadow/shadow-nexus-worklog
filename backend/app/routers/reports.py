@@ -1,13 +1,48 @@
+import re
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from ..deps import active_user
-from ..services import app_today, get_weekly_report
+from ..report_pdf import build_report_pdf
+from ..services import app_today, get_report_range
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
+MAX_RANGE_DAYS = 366
 
-@router.get("/weekly")
-def weekly(ref: date | None = Query(default=None, alias="date"), user=Depends(active_user)):
-    return get_weekly_report(user["user_id"], ref or app_today())
+
+def build_pdf_response(user_email: str, user_id: int, start: date, end: date) -> Response:
+    """Valida o periodo, monta os dados e devolve o PDF como download.
+
+    Compartilhado com o router admin (extracao para outro usuario).
+    """
+    if start > end:
+        raise HTTPException(status_code=400, detail="o início não pode ser depois do fim")
+    if (end - start).days > MAX_RANGE_DAYS:
+        raise HTTPException(status_code=400, detail=f"período máximo de {MAX_RANGE_DAYS} dias")
+
+    # Nao ha dias futuros: limita o fim a hoje (no fuso da app).
+    end = min(end, app_today())
+    if start > end:
+        raise HTTPException(status_code=400, detail="o início não pode ser no futuro")
+
+    data = get_report_range(user_id, start, end)
+    pdf = build_report_pdf(user_email, start, end, data)
+
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", user_email).strip("-").lower() or "usuario"
+    filename = f"relatorio-worklog-{slug}-{start.isoformat()}-a-{end.isoformat()}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export")
+def export(
+    start: date = Query(...),
+    end: date = Query(...),
+    user=Depends(active_user),
+):
+    return build_pdf_response(user["email"], user["user_id"], start, end)

@@ -60,7 +60,7 @@ export async function mount(root) {
       board.mount(content, { readOnly: true, boardUrl: `/admin/users/${uid}/board` });
     else if (active === "dashboard")
       dashboard.mount(content, { dashUrl: `/admin/users/${uid}/dashboard` });
-    else reports.mount(content, { reportUrl: `/admin/users/${uid}/reports/weekly` });
+    else reports.mount(content, { exportBase: `/admin/users/${uid}/reports/export` });
   }
 
   select.addEventListener("change", renderCurrent);

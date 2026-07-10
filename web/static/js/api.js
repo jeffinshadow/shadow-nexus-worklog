@@ -33,10 +33,47 @@ async function request(method, path, body) {
   return data;
 }
 
+// Baixa um arquivo de /api (GET, sem CSRF). Em erro, le o detalhe JSON e
+// lanca; em sucesso, dispara o download do blob. O nome vem do
+// Content-Disposition (fallback generico).
+async function download(path) {
+  const res = await fetch("/api" + path, { method: "GET", credentials: "same-origin" });
+
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    if (location.pathname !== "/login.html") location.href = "/login.html";
+    throw new Error("nao autenticado");
+  }
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const d = await res.json();
+      detail = (d && d.detail) || detail;
+    } catch {
+      /* resposta sem JSON */
+    }
+    throw Object.assign(new Error(detail), { status: res.status });
+  }
+
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/.exec(cd);
+  const filename = match ? match[1] : "download";
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: (p) => request("GET", p),
   post: (p, b) => request("POST", p, b),
   patch: (p, b) => request("PATCH", p, b),
   del: (p) => request("DELETE", p),
+  download,
   setCsrf,
 };

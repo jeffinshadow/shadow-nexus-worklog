@@ -1,61 +1,66 @@
 import { api } from "./api.js";
-import { h, clear, formatDate } from "./dom.js";
+import { h, clear } from "./dom.js";
 
+// Tela de EXTRACAO de relatorio: escolhe o periodo e exporta um PDF com as
+// atividades por dia. Admin passa opts.exportBase apontando para o usuario alvo.
 export async function mount(root, opts = {}) {
-  const base = opts.reportUrl || "/reports/weekly";
+  const base = opts.exportBase || "/reports/export";
   clear(root);
 
-  const dateInput = h("input", { type: "date" });
-  const out = h("div", {});
+  const iso = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = new Date();
+  const weekAgo = new Date();
+  weekAgo.setDate(today.getDate() - 6);
+
+  const startInput = h("input", { type: "date", value: iso(weekAgo) });
+  const endInput = h("input", { type: "date", value: iso(today) });
+  const err = h("div", { class: "error-text" });
+  const btn = h("button", { text: "Exportar PDF", onClick: run });
+
   root.append(
     h(
       "div",
-      { class: "report-controls" },
-      h("div", { class: "field" }, h("label", { text: "Semana (escolha um dia)" }), dateInput),
-      h("button", { text: "Ver", onClick: load })
-    ),
-    out
+      { class: "report-section" },
+      h("h3", { text: "Exportar relatório" }),
+      h("p", {
+        class: "sub",
+        text: "Escolha o período e baixe um PDF com as atividades por dia (recorrentes concluídas/não concluídas e pontuais concluídas).",
+      }),
+      h(
+        "div",
+        { class: "report-controls" },
+        h("div", { class: "field" }, h("label", { text: "Início" }), startInput),
+        h("div", { class: "field" }, h("label", { text: "Fim" }), endInput),
+        btn
+      ),
+      err
+    )
   );
 
-  async function load() {
-    const query = dateInput.value ? "?date=" + dateInput.value : "";
-    const data = await api.get(base + query);
-    render(data);
+  async function run() {
+    err.textContent = "";
+    const start = startInput.value;
+    const end = endInput.value;
+    if (!start || !end) {
+      err.textContent = "Preencha início e fim.";
+      return;
+    }
+    if (start > end) {
+      err.textContent = "O início não pode ser depois do fim.";
+      return;
+    }
+
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Gerando...";
+    try {
+      await api.download(`${base}?start=${start}&end=${end}`);
+    } catch (e) {
+      err.textContent = e.message || "Falha ao exportar.";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
   }
-
-  function render(data) {
-    clear(out);
-    out.append(
-      h("p", { class: "sub", text: `Semana: ${fmtFull(data.week_start)} a ${fmtFull(data.week_end)}` })
-    );
-
-    const rec = h("ul", { class: "report-list" });
-    if (!data.recurring.length) rec.append(h("li", { class: "empty", text: "Nenhuma." }));
-    for (const r of data.recurring)
-      rec.append(h("li", {}, r.label, h("span", { class: "when", text: formatDate(r.completed_date) })));
-
-    const wl = h("ul", { class: "report-list" });
-    if (!data.worklog.length) wl.append(h("li", { class: "empty", text: "Nenhuma." }));
-    for (const w of data.worklog)
-      wl.append(
-        h(
-          "li",
-          {},
-          w.title,
-          w.completed_at ? h("span", { class: "when", text: formatDate(w.completed_at) }) : null
-        )
-      );
-
-    out.append(
-      h("div", { class: "report-section" }, h("h3", { text: "Recorrentes concluídas" }), rec),
-      h("div", { class: "report-section" }, h("h3", { text: "Tarefas finalizadas" }), wl)
-    );
-  }
-
-  load();
-}
-
-function fmtFull(value) {
-  const d = new Date(value + "T00:00:00");
-  return d.toLocaleDateString("pt-BR");
 }

@@ -4,14 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .. import db
 from ..deps import require_admin
-from ..services import app_today, get_board, get_dashboard, get_weekly_report
+from ..services import get_board, get_dashboard
+from .reports import build_pdf_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
-def _ensure_user(user_id: int) -> None:
-    if not db.query_one("SELECT 1 FROM users WHERE id = %s", (user_id,)):
+def _ensure_user(user_id: int) -> dict:
+    row = db.query_one("SELECT id, email FROM users WHERE id = %s", (user_id,))
+    if not row:
         raise HTTPException(status_code=404, detail="usuario nao encontrado")
+    return row
 
 
 @router.get("/users")
@@ -33,11 +36,12 @@ def user_dashboard(user_id: int, admin=Depends(require_admin)):
     return get_dashboard(user_id)
 
 
-@router.get("/users/{user_id}/reports/weekly")
-def user_report(
+@router.get("/users/{user_id}/reports/export")
+def user_report_export(
     user_id: int,
-    ref: date | None = Query(default=None, alias="date"),
+    start: date = Query(...),
+    end: date = Query(...),
     admin=Depends(require_admin),
 ):
-    _ensure_user(user_id)
-    return get_weekly_report(user_id, ref or app_today())
+    target = _ensure_user(user_id)
+    return build_pdf_response(target["email"], user_id, start, end)
