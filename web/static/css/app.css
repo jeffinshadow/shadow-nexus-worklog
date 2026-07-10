@@ -90,19 +90,21 @@ input:focus, select:focus, textarea:focus {
 .topbar-actions { display: flex; align-items: center; gap: 8px; justify-self: end; min-width: 0; }
 .topbar .who { font-size: 0.85rem; color: var(--on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24ch; }
 
-/* Menu integrado ao cabeçalho, centralizado em relação à página. */
+/* Menu integrado ao cabeçalho, centralizado em relação à página.
+   Abas só com ícone: rótulo fica em title/aria-label (tooltip + acessibilidade). */
 .tabs { justify-self: center; display: flex; gap: 4px; }
 .tabs button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   background: transparent;
   color: var(--on-surface-variant);
   border-radius: 0;
-  padding: 8px 14px;
+  padding: 10px 18px;
   border-bottom: 3px solid transparent;
 }
-.tabs .inline-icon { width: 18px; height: 18px; }
+.tabs button:hover { color: var(--on-surface); background: var(--surface-container-high); }
+.tabs .inline-icon { width: 24px; height: 24px; }
 .tabs button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
 
 /* Mobile: a barra vira flex; o menu desce para uma 2ª linha centralizada e o
