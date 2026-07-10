@@ -13,19 +13,6 @@ const VIEWS = {
 
 let me = null;
 
-function initTheme() {
-  const saved = localStorage.getItem("theme");
-  if (saved) document.documentElement.setAttribute("data-theme", saved);
-  document.getElementById("btn-theme").addEventListener("click", () => {
-    const current =
-      document.documentElement.getAttribute("data-theme") ||
-      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    const next = current === "dark" ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-  });
-}
-
 function switchView(name) {
   for (const [key, v] of Object.entries(VIEWS)) {
     document.getElementById(v.el).classList.toggle("hidden", key !== name);
@@ -81,7 +68,6 @@ function showChangePassword() {
 }
 
 async function boot() {
-  initTheme();
   try {
     me = await api.get("/auth/me");
   } catch (e) {
