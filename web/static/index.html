@@ -24,32 +24,36 @@
   </svg>
 
   <header class="topbar">
-    <img class="brand-logo" src="/img/shadow-wordmark.png" alt="Shadow" width="200" height="120">
-    <h1>Nexus Worklog</h1>
-    <div class="spacer"></div>
-    <span class="who" id="who"></span>
-    <button class="icon" id="btn-theme" title="Alternar tema" aria-label="Alternar tema">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-theme"></use></svg>
-    </button>
-    <button class="icon" id="btn-logout" title="Sair" aria-label="Sair">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-logout"></use></svg>
-    </button>
-  </header>
+    <div class="topbar-brand">
+      <img class="brand-logo" src="/img/shadow-wordmark.png" alt="Shadow" width="200" height="120">
+      <h1>Nexus Worklog</h1>
+    </div>
 
-  <nav class="tabs" id="tabs" role="tablist">
-    <button role="tab" data-view="board" aria-selected="true">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-tasks"></use></svg>Tarefas
-    </button>
-    <button role="tab" data-view="reports" aria-selected="false">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-reports"></use></svg>Relatórios
-    </button>
-    <button role="tab" data-view="dashboard" aria-selected="false">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-dashboard"></use></svg>Dashboard
-    </button>
-    <button role="tab" data-view="admin" aria-selected="false" id="tab-admin" class="hidden">
-      <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-admin"></use></svg>Admin
-    </button>
-  </nav>
+    <nav class="tabs" id="tabs" role="tablist">
+      <button role="tab" data-view="board" aria-selected="true">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-tasks"></use></svg>Tarefas
+      </button>
+      <button role="tab" data-view="reports" aria-selected="false">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-reports"></use></svg>Relatórios
+      </button>
+      <button role="tab" data-view="dashboard" aria-selected="false">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-dashboard"></use></svg>Dashboard
+      </button>
+      <button role="tab" data-view="admin" aria-selected="false" id="tab-admin" class="hidden">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-admin"></use></svg>Admin
+      </button>
+    </nav>
+
+    <div class="topbar-actions">
+      <span class="who" id="who"></span>
+      <button class="icon" id="btn-theme" title="Alternar tema" aria-label="Alternar tema">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-theme"></use></svg>
+      </button>
+      <button class="icon" id="btn-logout" title="Sair" aria-label="Sair">
+        <svg class="inline-icon" viewBox="0 0 24 24"><use href="#icon-logout"></use></svg>
+      </button>
+    </div>
+  </header>
 
   <main>
     <section id="view-change-password" class="auth-wrap hidden">
