@@ -1,66 +1,152 @@
 import { api } from "./api.js";
-import { h, clear } from "./dom.js";
+import { h, clear, formatDate } from "./dom.js";
 
 const NS = "http://www.w3.org/2000/svg";
-const DONE_COLOR = "var(--primary)";
-const OPEN_COLOR = "var(--surface-container-high)";
+const KPI_LABELS = ["Dia", "Semana", "Mês"];
+const KPI_KEYS = ["day", "week", "month"];
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-// Todas as agregações vêm do backend (/dashboard), já separadas em dois grupos
-// comparáveis. O frontend só desenha as pizzas.
+// Todas as agregações vêm do backend (/dashboard): as pizzas (visão geral) e o
+// bloco `analytics` (séries e recortes). O frontend só desenha — SVG na mão,
+// sem libs, coerente com a CSP rígida.
 export async function mount(root, opts = {}) {
   const dashUrl = opts.dashUrl || "/dashboard";
   const data = await api.get(dashUrl);
+  const a = data.analytics || {};
 
   clear(root);
   root.append(
-    groupRow("Tarefas Recorrentes Diárias", data.recurring),
-    groupRow("Tarefas Pontuais", data.pontual)
+    section("Visão geral", [
+      kpiGroup("Tarefas recorrentes", data.recurring, true),
+      kpiGroup("Pontuais concluídas", data.pontual, false),
+    ]),
+    section("Recorrentes · consistência", [
+      grid([
+        chartCard("Aderência diária", "Últimas 12 semanas — % das recorrentes vigentes concluídas em cada dia.", heatmap(a.heatmap), true),
+        chartCard("Tendência semanal", "% de aderência agregada por semana.", weeklyTrend(a.heatmap), true),
+        chartCard("Aderência por tarefa", "Últimos 30 dias — dias concluídos ÷ dias vigentes.", taskRanking(a.task_adherence), true),
+      ]),
+    ]),
+    section("Pontuais · fluxo", [
+      grid([
+        chartCard("Concluídas por semana", "Vazão das últimas 12 semanas.", throughput(a.throughput)),
+        chartCard("Tempo de conclusão", "Da criação até concluída (últimos 90 dias).", cycleTime(a.cycle_time)),
+        chartCard("Por dia da semana", "Conclusões (recorrentes + pontuais) nas últimas 8 semanas.", weekdayChart(a.weekday)),
+      ]),
+    ]),
+    section("Backlog · saúde", [
+      backlogHealth(a.backlog),
+    ])
   );
 }
 
-function groupRow(title, g) {
-  return h(
-    "section",
-    { class: "dash-group" },
-    h("h2", { class: "dash-group-title", text: title }),
-    h(
-      "div",
-      { class: "metrics" },
-      pieCard("Dia", g.day.done, g.day.open),
-      pieCard("Semana", g.week.done, g.week.open),
-      pieCard("Mês", g.month.done, g.month.open)
-    )
-  );
+// ---------------------------------------------------------------- estrutura --
+
+function section(title, children) {
+  return h("section", { class: "dash-section" },
+    h("h2", { class: "dash-section-title", text: title }),
+    ...children);
 }
 
-function pieCard(title, done, open) {
+function grid(cards) {
+  return h("div", { class: "chart-grid" }, ...cards);
+}
+
+function chartCard(title, sub, body, spanAll) {
+  return h("div", { class: "chart-card" + (spanAll ? " span-all" : "") },
+    h("h3", { class: "chart-title", text: title }),
+    sub ? h("p", { class: "chart-sub", text: sub }) : null,
+    body);
+}
+
+function emptyBox(msg) {
+  return h("div", { class: "chart-empty", text: msg });
+}
+
+// ------------------------------------------------------------- helpers SVG --
+
+function svg(w, height, cls) {
+  const s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", `0 0 ${w} ${height}`);
+  s.setAttribute("class", cls || "chart-svg");
+  s.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  return s;
+}
+
+function rect(x, y, w, hh, fill, extra = {}) {
+  const r = document.createElementNS(NS, "rect");
+  r.setAttribute("x", x);
+  r.setAttribute("y", y);
+  r.setAttribute("width", Math.max(0, w));
+  r.setAttribute("height", Math.max(0, hh));
+  if (fill) r.style.fill = fill;
+  for (const [k, v] of Object.entries(extra)) r.setAttribute(k, v);
+  return r;
+}
+
+function lineEl(x1, y1, x2, y2, color) {
+  const l = document.createElementNS(NS, "line");
+  l.setAttribute("x1", x1); l.setAttribute("y1", y1);
+  l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+  l.style.stroke = color;
+  return l;
+}
+
+function textEl(x, y, str, cls, anchor) {
+  const t = document.createElementNS(NS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", y);
+  if (anchor) t.setAttribute("text-anchor", anchor);
+  if (cls) t.setAttribute("class", cls);
+  t.textContent = str;
+  return t;
+}
+
+function withTitle(node, str) {
+  const t = document.createElementNS(NS, "title");
+  t.textContent = str;
+  node.appendChild(t);
+  return node;
+}
+
+function parseISO(s) {
+  return new Date(s + "T00:00:00");
+}
+
+// ------------------------------------------------- visão geral (KPIs) --------
+
+// Cabeçalho de indicadores: 3 horizontes (dia/semana/mês) por grupo.
+// Recorrentes = razão concluídas/slots (barra + %), um parte-de-todo honesto.
+// Pontuais = contagem de concluídas no período (o "em aberto" é da seção de
+// backlog, não daqui — evita o denominador-snapshot enganoso das pizzas).
+function kpiGroup(title, g, isRatio) {
+  const tiles = KPI_LABELS.map((label, i) => {
+    const cell = g[KPI_KEYS[i]];
+    return isRatio ? ratioTile(label, cell.done, cell.open) : countTile(label, cell.done);
+  });
+  return h("div", { class: "dash-group" },
+    h("h3", { class: "dash-group-title", text: title }),
+    h("div", { class: "kpi-row" }, ...tiles));
+}
+
+function ratioTile(label, done, open) {
   const total = done + open;
-  const empty = total === 0; // período sem tarefas: banco vazio não pode quebrar
-  const frac = empty ? 0 : done / total;
-  const pct = Math.round(frac * 100);
+  const empty = total === 0;
+  const pct = empty ? 0 : Math.round((done / total) * 100);
+  const fill = h("span", { class: "kpi-fill" });
+  fill.style.width = pct + "%";
+  return h("div", { class: "kpi-tile" },
+    h("span", { class: "kpi-label", text: label }),
+    h("span", { class: "kpi-value" + (empty ? " muted" : ""), text: empty ? "—" : pct + "%" }),
+    h("div", { class: "kpi-track", role: "img", "aria-label": `${pct}% concluídas` }, fill),
+    h("span", { class: "kpi-sub", text: empty ? "sem tarefas" : `${done} de ${total}` }));
+}
 
-  const caption = empty
-    ? h("span", { class: "pie-empty", text: "sem dados" })
-    : h(
-        "span",
-        {},
-        h("span", { class: "pie-pct", text: pct + "%" }),
-        h("span", { text: " concluídas" })
-      );
-
-  return h(
-    "div",
-    { class: "metric" },
-    h("h3", { text: title }),
-    empty ? emptyPie() : buildPie(frac),
-    h("div", { class: "pie-caption" }, caption),
-    h(
-      "div",
-      { class: "pie-legend" },
-      legendItem("Concluídas", done, DONE_COLOR),
-      legendItem("Em aberto", open, OPEN_COLOR)
-    )
-  );
+function countTile(label, done) {
+  return h("div", { class: "kpi-tile" },
+    h("span", { class: "kpi-label", text: label }),
+    h("span", { class: "kpi-value", text: String(done) }),
+    h("span", { class: "kpi-sub", text: "concluída(s)" }));
 }
 
 function legendItem(label, count, color) {
@@ -69,63 +155,316 @@ function legendItem(label, count, color) {
   return h("span", { class: "item" }, swatch, `${label}: ${count}`);
 }
 
-const SIZE = 140;
-const R = 60;
-const C = SIZE / 2;
+// ------------------------------------------------------ heatmap (calendário) --
 
-function makeSvg(label) {
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "pie-svg");
-  svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
-  svg.setAttribute("width", String(SIZE));
-  svg.setAttribute("height", String(SIZE));
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", label);
-  return svg;
+function heatColor(d) {
+  if (d.slots === 0) return { fill: "var(--surface-container)", op: 1 };
+  if (d.done === 0) return { fill: "var(--surface-container-high)", op: 1 };
+  const frac = Math.min(1, d.done / d.slots);
+  const op = frac >= 1 ? 1 : frac >= 0.67 ? 0.75 : frac >= 0.34 ? 0.5 : 0.28;
+  return { fill: "var(--primary)", op };
 }
 
-function buildPie(frac) {
-  const svg = makeSvg(`${Math.round(frac * 100)}% concluídas`);
-  if (frac <= 0) svg.appendChild(circle(C, R, OPEN_COLOR));
-  else if (frac >= 1) svg.appendChild(circle(C, R, DONE_COLOR));
-  else {
-    svg.appendChild(slice(C, R, 0, frac, DONE_COLOR));
-    svg.appendChild(slice(C, R, frac, 1, OPEN_COLOR));
+function heatmap(hm) {
+  if (!hm || !hm.days || !hm.days.length || hm.days.every((d) => d.slots === 0))
+    return emptyBox("sem recorrentes ainda");
+  const days = hm.days;
+  const start = parseISO(hm.start);
+  const cols = Math.ceil(days.length / 7);
+  const cell = 12, gap = 3, step = cell + gap;
+  const padL = 26, padT = 16;
+  const w = padL + cols * step + 2;
+  const height = padT + 7 * step + 2;
+  const s = svg(w, height, "chart-svg heatmap");
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", "Calendário de aderência das tarefas recorrentes");
+
+  // Rótulos de mês (quando a coluna inicia um mês diferente da anterior).
+  let prevMonth = -1;
+  for (let col = 0; col < cols; col++) {
+    const dt = new Date(start.getTime() + col * 7 * 86400000);
+    if (dt.getMonth() !== prevMonth) {
+      s.appendChild(textEl(padL + col * step, padT - 5, MONTHS[dt.getMonth()], "heat-axis"));
+      prevMonth = dt.getMonth();
+    }
   }
-  return svg;
+  // Rótulos de dia da semana (linhas 1/3/5 = seg/qua/sex).
+  for (const row of [1, 3, 5]) {
+    s.appendChild(textEl(0, padT + row * step + cell - 2, WEEKDAYS[row].toLowerCase().slice(0, 3), "heat-axis"));
+  }
+
+  days.forEach((d, i) => {
+    const col = Math.floor(i / 7), row = i % 7;
+    const { fill, op } = heatColor(d);
+    const r = rect(padL + col * step, padT + row * step, cell, cell, fill, { rx: 2 });
+    if (op !== 1) r.style.opacity = op;
+    const label = formatDate(d.date);
+    withTitle(r, d.slots === 0 ? `${label}: sem tarefas` : `${label}: ${d.done}/${d.slots} concluídas`);
+    s.appendChild(r);
+  });
+
+  return h("div", {}, s, heatLegend());
 }
 
-// Estado vazio: círculo neutro com contorno (não confundir com "0% concluído,
-// tudo em aberto"). Nunca lança exceção — o banco começa sem tarefas.
-function emptyPie() {
-  const svg = makeSvg("sem dados");
-  const el = circle(C, R, "var(--surface-container-high)");
-  el.style.stroke = "var(--outline-variant)";
-  el.style.strokeWidth = "2";
-  svg.appendChild(el);
-  return svg;
+function heatLegend() {
+  const box = h("div", { class: "heat-legend" }, h("span", { text: "menos" }));
+  for (const op of [null, 0.28, 0.5, 0.75, 1]) {
+    const sw = h("span", { class: "heat-cell" });
+    if (op === null) sw.style.background = "var(--surface-container-high)";
+    else { sw.style.background = "var(--primary)"; sw.style.opacity = op; }
+    box.append(sw);
+  }
+  box.append(h("span", { text: "mais" }));
+  return box;
 }
 
-function circle(c, r, color) {
-  const el = document.createElementNS(NS, "circle");
-  el.setAttribute("cx", String(c));
-  el.setAttribute("cy", String(c));
-  el.setAttribute("r", String(r));
-  el.style.fill = color;
-  return el;
+// ------------------------------------------------- tendência semanal (linha) --
+
+function weeklyTrend(hm) {
+  if (!hm || !hm.days || !hm.days.length || hm.days.every((d) => d.slots === 0))
+    return emptyBox("sem dados");
+  // Agrupa a série diária por semana (7 dias contíguos a partir de um domingo).
+  const weeks = [];
+  for (let i = 0; i < hm.days.length; i += 7) {
+    const chunk = hm.days.slice(i, i + 7);
+    const done = chunk.reduce((a, d) => a + d.done, 0);
+    const slots = chunk.reduce((a, d) => a + d.slots, 0);
+    weeks.push({ date: chunk[0].date, pct: slots ? (done / slots) * 100 : 0, slots });
+  }
+  const W = 320, H = 130, padL = 28, padR = 10, padT = 12, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = weeks.length;
+  const x = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const y = (pct) => padT + (1 - pct / 100) * plotH;
+
+  const s = svg(W, H, "chart-svg");
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", "Tendência semanal de aderência");
+
+  // Grades 0/50/100%.
+  for (const pct of [0, 50, 100]) {
+    s.appendChild(lineEl(padL, y(pct), W - padR, y(pct), "var(--outline-variant)"));
+    s.appendChild(textEl(padL - 5, y(pct) + 3, pct + "%", "chart-axis", "end"));
+  }
+
+  const pts = weeks.map((w, i) => `${x(i)},${y(w.pct)}`);
+  // Área sob a curva.
+  const area = document.createElementNS(NS, "path");
+  area.setAttribute("d", `M ${x(0)},${y(0)} L ${pts.join(" L ")} L ${x(n - 1)},${y(0)} Z`);
+  area.setAttribute("class", "trend-area");
+  s.appendChild(area);
+  // Linha.
+  const poly = document.createElementNS(NS, "polyline");
+  poly.setAttribute("points", pts.join(" "));
+  poly.setAttribute("class", "trend-line");
+  s.appendChild(poly);
+  // Pontos.
+  weeks.forEach((w, i) => {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", x(i)); c.setAttribute("cy", y(w.pct)); c.setAttribute("r", 2.5);
+    c.setAttribute("class", "trend-dot");
+    withTitle(c, `semana de ${formatDate(w.date)}: ${Math.round(w.pct)}%`);
+    s.appendChild(c);
+  });
+  // Rótulos do eixo x (primeira, meio, última semana).
+  for (const i of [0, Math.floor((n - 1) / 2), n - 1]) {
+    s.appendChild(textEl(x(i), H - 6, formatDate(weeks[i].date), "chart-axis", "middle"));
+  }
+  return s;
 }
 
-function slice(c, r, f0, f1, color) {
-  const a0 = 2 * Math.PI * f0;
-  const a1 = 2 * Math.PI * f1;
-  const x0 = c + r * Math.sin(a0);
-  const y0 = c - r * Math.cos(a0);
-  const x1 = c + r * Math.sin(a1);
-  const y1 = c - r * Math.cos(a1);
-  const large = a1 - a0 > Math.PI ? 1 : 0;
+// -------------------------------------------------- ranking por tarefa (HTML) --
 
-  const el = document.createElementNS(NS, "path");
-  el.setAttribute("d", `M ${c} ${c} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`);
-  el.style.fill = color;
-  return el;
+function taskRanking(ta) {
+  const tasks = (ta && ta.tasks) || [];
+  if (!tasks.length) return emptyBox("nenhuma recorrente vigente nos últimos 30 dias");
+  const rows = tasks.map((t) => {
+    const pct = Math.round((t.done / t.slots) * 100);
+    const fill = h("span", { class: "rank-fill" });
+    fill.style.width = pct + "%";
+    const parts = [
+      h("span", { class: "rank-label", text: t.label, title: t.label }),
+      h("span", { class: "rank-track" }, fill),
+      h("span", { class: "rank-value", text: `${pct}%` }),
+      h("span", { class: "rank-count", text: `${t.done}/${t.slots}` }),
+    ];
+    if (t.streak > 0) {
+      parts.push(h("span", {
+        class: "rank-streak",
+        title: `sequência atual: ${t.streak} dia(s)`,
+        text: `▲ ${t.streak}`,
+      }));
+    } else {
+      parts.push(h("span", { class: "rank-streak empty" }));
+    }
+    return h("div", { class: "rank-row" }, ...parts);
+  });
+  return h("div", { class: "rank-list" }, ...rows);
+}
+
+// ------------------------------------------------------ barras verticais base --
+
+// Desenha um gráfico de barras verticais a partir de itens {value, label, title,
+// highlight}. `unit` opcional aparece no topo da barra de maior valor.
+function verticalBars(items, opts = {}) {
+  if (!items.length) return emptyBox(opts.emptyMsg || "sem dados");
+  const max = Math.max(1, ...items.map((it) => it.value));
+  const n = items.length;
+  const barW = opts.barW || 26, gap = opts.gap || 10;
+  const padT = 14, padB = 22, padL = 6, padR = 6;
+  const plotH = 96;
+  const W = padL + padR + n * barW + (n - 1) * gap;
+  const H = padT + plotH + padB;
+  const s = svg(W, H, "chart-svg");
+  items.forEach((it, i) => {
+    const x = padL + i * (barW + gap);
+    const bh = (it.value / max) * plotH;
+    const y = padT + plotH - bh;
+    const color = it.highlight ? "var(--primary)" : (opts.color || "var(--primary-container)");
+    const bar = rect(x, y, barW, bh, color, { rx: 3 });
+    withTitle(bar, it.title || `${it.label}: ${it.value}`);
+    s.appendChild(bar);
+    if (it.value > 0) s.appendChild(textEl(x + barW / 2, y - 4, String(it.value), "chart-val", "middle"));
+    s.appendChild(textEl(x + barW / 2, H - 7, it.label, "chart-axis", "middle"));
+  });
+  return s;
+}
+
+// --------------------------------------------------------------- throughput --
+
+function throughput(tp) {
+  const weeks = (tp && tp.weeks) || [];
+  if (!weeks.length) return emptyBox("sem dados");
+  const total = weeks.reduce((a, w) => a + w.done, 0);
+  const items = weeks.map((w, i) => ({
+    value: w.done,
+    // rótulo só a cada 2 semanas para não poluir
+    label: i % 2 === weeks.length % 2 ? formatDate(w.week_start) : "",
+    title: `semana de ${formatDate(w.week_start)}: ${w.done} concluída(s)`,
+  }));
+  const chart = verticalBars(items, { barW: 16, gap: 6, color: "var(--primary)" });
+  if (total === 0) return h("div", {}, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 12 semanas" }));
+  return chart;
+}
+
+// ---------------------------------------------------------------- cycle time --
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+function fmtDuration(hours) {
+  if (hours < 24) return `${Math.round(hours)} h`;
+  const d = hours / 24;
+  return d < 10 ? `${d.toFixed(1).replace(".", ",")} d` : `${Math.round(d)} d`;
+}
+
+const CYCLE_BUCKETS = [
+  { label: "<1d", max: 24 },
+  { label: "1–3d", max: 72 },
+  { label: "3–7d", max: 168 },
+  { label: "1–2sem", max: 336 },
+  { label: ">2sem", max: Infinity },
+];
+
+function cycleTime(ct) {
+  const durs = (ct && ct.durations_h) || [];
+  if (!durs.length) return emptyBox("nenhuma pontual concluída em 90 dias");
+  const med = median(durs);
+  const counts = CYCLE_BUCKETS.map((b) => 0);
+  for (const hVal of durs) {
+    const idx = CYCLE_BUCKETS.findIndex((b) => hVal < b.max);
+    counts[idx === -1 ? CYCLE_BUCKETS.length - 1 : idx]++;
+  }
+  const items = CYCLE_BUCKETS.map((b, i) => ({
+    value: counts[i], label: b.label, title: `${b.label}: ${counts[i]} tarefa(s)`,
+  }));
+  return h("div", {},
+    h("div", { class: "stat-inline" },
+      h("span", { class: "stat-big", text: fmtDuration(med) }),
+      h("span", { class: "stat-cap", text: `mediana · ${durs.length} concluída(s)` })),
+    verticalBars(items, { barW: 30, gap: 12, color: "var(--primary-container)" }));
+}
+
+// ------------------------------------------------------------------- weekday --
+
+function weekdayChart(wd) {
+  const counts = (wd && wd.counts) || [];
+  if (!counts.length || counts.every((c) => c === 0)) return emptyBox("sem conclusões nas últimas 8 semanas");
+  const max = Math.max(...counts);
+  const items = counts.map((c, i) => ({
+    value: c, label: WEEKDAYS[i], highlight: c === max && c > 0,
+    title: `${WEEKDAYS[i]}: ${c} conclusão(ões)`,
+  }));
+  return verticalBars(items, { barW: 24, gap: 8 });
+}
+
+// -------------------------------------------------------------- backlog saúde --
+
+function backlogHealth(b) {
+  if (!b) return emptyBox("sem dados");
+  const open = b.todo + b.in_progress + b.blocked;
+
+  const tiles = h("div", { class: "stat-tiles" },
+    statTile("Em aberto", open, null),
+    statTile("Bloqueadas", b.blocked, b.blocked > 0 ? "error" : null),
+    statTile("Atrasadas", b.overdue, b.overdue > 0 ? "error" : null));
+
+  const statusBody = open === 0
+    ? emptyBox("nada em aberto")
+    : h("div", {},
+        stackedBar([
+          { value: b.todo, color: "var(--surface-container-high)", label: "A fazer" },
+          { value: b.in_progress, color: "var(--primary)", label: "Em andamento" },
+          { value: b.blocked, color: "var(--error)", label: "Bloqueado" },
+        ], open),
+        h("div", { class: "bar-legend" },
+          legendItem("A fazer", b.todo, "var(--surface-container-high)"),
+          legendItem("Em andamento", b.in_progress, "var(--primary)"),
+          legendItem("Bloqueado", b.blocked, "var(--error)")));
+
+  const ag = b.aging || { new: 0, mid: 0, old: 0 };
+  const agingBody = (ag.new + ag.mid + ag.old) === 0
+    ? emptyBox("nada em aberto")
+    : h("div", { class: "aging-list" },
+        agingRow("menos de 1 semana", ag.new, "var(--success)"),
+        agingRow("1 a 4 semanas", ag.mid, "var(--warning)"),
+        agingRow("mais de 4 semanas", ag.old, "var(--error)"));
+
+  return h("div", {},
+    tiles,
+    grid([
+      chartCard("Backlog por status", "Tarefas em aberto agora.", statusBody),
+      chartCard("Envelhecimento", "Há quanto tempo as abertas existem.", agingBody),
+    ]));
+}
+
+function statTile(label, value, tone) {
+  return h("div", { class: "stat-tile" + (tone ? " " + tone : "") },
+    h("span", { class: "stat-tile-value", text: String(value) }),
+    h("span", { class: "stat-tile-label", text: label }));
+}
+
+function stackedBar(segs, total) {
+  const bar = h("div", { class: "stacked-bar" });
+  for (const seg of segs) {
+    if (seg.value <= 0) continue;
+    const part = h("span", { class: "stacked-seg", title: `${seg.label}: ${seg.value}` });
+    part.style.width = (seg.value / total) * 100 + "%";
+    part.style.background = seg.color;
+    bar.append(part);
+  }
+  return bar;
+}
+
+function agingRow(label, count, color) {
+  const dot = h("span", { class: "aging-dot" });
+  dot.style.background = color;
+  return h("div", { class: "aging-row" },
+    dot,
+    h("span", { class: "aging-label", text: label }),
+    h("span", { class: "aging-count", text: String(count) }));
 }

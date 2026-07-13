@@ -5,7 +5,7 @@ sao as rotas (proprio usuario, ou alvo validado por require_admin). Assim a
 mesma logica serve tanto o usuario comum quanto a visao de admin.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import db
@@ -14,6 +14,16 @@ from .config import config
 
 def app_today() -> date:
     return datetime.now(ZoneInfo(config.APP_TZ)).date()
+
+
+# Semana começa no DOMINGO (padrão do app). date.weekday(): seg=0..dom=6;
+# (weekday()+1) % 7 -> dom=0, seg=1, ..., sáb=6, que é o "índice de domingo".
+def _sun_index(d: date) -> int:
+    return (d.weekday() + 1) % 7
+
+
+def _week_start(d: date) -> date:
+    return d - timedelta(days=_sun_index(d))
 
 
 def get_board(user_id: int) -> dict:
@@ -155,6 +165,177 @@ def get_dashboard(user_id: int) -> dict:
             "day":   {"done": b["day_done"],   "open": b["open_now"]},
             "week":  {"done": b["week_done"],  "open": b["open_now"]},
             "month": {"done": b["month_done"], "open": b["open_now"]},
+        },
+        "analytics": get_dashboard_analytics(user_id),
+    }
+
+
+# Janelas dos gráficos analíticos (em dias / semanas, sempre no fuso do app).
+_HEAT_WEEKS = 12         # calendário de aderência das recorrentes
+_ADHERENCE_DAYS = 30     # ranking de aderência por tarefa
+_THROUGHPUT_WEEKS = 12   # vazão semanal de pontuais
+_CYCLE_DAYS = 90         # tempo de ciclo das pontuais
+_WEEKDAY_WEEKS = 8       # produtividade por dia da semana
+_STREAK_LOOKBACK = 120   # histórico p/ calcular a sequência (streak) atual
+
+
+def _current_streak(dates: set, today: date) -> int:
+    """Dias consecutivos concluídos terminando em hoje (ou ontem, se hoje ainda
+    não foi concluído — o dia em aberto não quebra a sequência)."""
+    anchor = today if today in dates else today - timedelta(days=1)
+    streak = 0
+    d = anchor
+    while d in dates:
+        streak += 1
+        d -= timedelta(days=1)
+    return streak
+
+
+def get_dashboard_analytics(user_id: int) -> dict:
+    """Séries e recortes analíticos do dashboard.
+
+    Estratégia: puxamos poucos conjuntos crus do banco (tarefas + vigência,
+    completions recentes, pontuais concluídas recentes, e um snapshot agregado
+    do backlog) e derivamos TODOS os gráficos em Python. Além de simples, isso
+    torna a agregação testável sem Postgres (só o SQL cru precisaria dele).
+    Toda data já vem no fuso do app; `today` é a referência única.
+    """
+    tz = config.APP_TZ
+    today = app_today()
+
+    tasks = db.query_all(
+        """
+        SELECT r.id, r.label,
+               (r.created_at AT TIME ZONE %s)::date AS start_d,
+               COALESCE((r.deactivated_at AT TIME ZONE %s)::date,
+                        (now() AT TIME ZONE %s)::date) AS end_d
+          FROM recurring_tasks r
+         WHERE r.user_id = %s
+         ORDER BY r.position, r.id
+        """,
+        (tz, tz, tz, user_id),
+    )
+    completions = db.query_all(
+        """
+        SELECT task_id, completed_date
+          FROM recurring_completions
+         WHERE user_id = %s AND completed_date BETWEEN %s AND %s
+        """,
+        (user_id, today - timedelta(days=_STREAK_LOOKBACK), today),
+    )
+    pont = db.query_all(
+        """
+        SELECT (completed_at AT TIME ZONE %s)::date AS done_d,
+               EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600.0 AS hours
+          FROM worklog_tasks
+         WHERE user_id = %s AND status = 'done' AND completed_at IS NOT NULL
+           AND (completed_at AT TIME ZONE %s)::date >= %s
+        """,
+        (tz, user_id, tz, today - timedelta(days=_CYCLE_DAYS)),
+    )
+    backlog = db.query_one(
+        """
+        SELECT
+          count(*) FILTER (WHERE status = 'todo')::int        AS todo,
+          count(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
+          count(*) FILTER (WHERE status = 'blocked')::int     AS blocked,
+          count(*) FILTER (WHERE status <> 'done' AND due_date IS NOT NULL
+                             AND due_date < %s)::int           AS overdue,
+          count(*) FILTER (WHERE status <> 'done'
+                             AND %s - (created_at AT TIME ZONE %s)::date < 7)::int          AS age_new,
+          count(*) FILTER (WHERE status <> 'done'
+                             AND %s - (created_at AT TIME ZONE %s)::date BETWEEN 7 AND 30)::int AS age_mid,
+          count(*) FILTER (WHERE status <> 'done'
+                             AND %s - (created_at AT TIME ZONE %s)::date > 30)::int         AS age_old
+          FROM worklog_tasks
+         WHERE user_id = %s
+        """,
+        (today, today, tz, today, tz, today, tz, user_id),
+    )
+
+    # Índices das completions de recorrentes.
+    done_by_date: dict[date, int] = {}
+    dates_by_task: dict[int, set] = {}
+    for c in completions:
+        d = c["completed_date"]
+        done_by_date[d] = done_by_date.get(d, 0) + 1
+        dates_by_task.setdefault(c["task_id"], set()).add(d)
+
+    # 1) Heatmap: série diária (done, slots) das últimas _HEAT_WEEKS semanas.
+    #    _week_start(today) é um domingo, então heat_start também é domingo:
+    #    cada coluna do calendário é uma semana começando no domingo.
+    heat_start = _week_start(today) - timedelta(days=(_HEAT_WEEKS - 1) * 7)
+    heat_days = []
+    d = heat_start
+    while d <= today:
+        slots = sum(1 for t in tasks if t["start_d"] <= d <= t["end_d"])
+        heat_days.append({"date": d, "slots": slots, "done": done_by_date.get(d, 0)})
+        d += timedelta(days=1)
+
+    # 2) Ranking de aderência por tarefa (últimos _ADHERENCE_DAYS) + streak atual.
+    win_start = today - timedelta(days=_ADHERENCE_DAYS - 1)
+    task_rows = []
+    for t in tasks:
+        s = max(win_start, t["start_d"])
+        e = min(today, t["end_d"])
+        slots = (e - s).days + 1 if e >= s else 0
+        if slots <= 0:
+            continue  # tarefa não vigente na janela: fora do ranking
+        dts = dates_by_task.get(t["id"], set())
+        done = sum(1 for dd in dts if s <= dd <= e)
+        task_rows.append({
+            "label": t["label"], "slots": slots, "done": done,
+            "streak": _current_streak(dts, today),
+        })
+    task_rows.sort(key=lambda r: (r["done"] / r["slots"], r["done"]), reverse=True)
+
+    # 3) Vazão: pontuais concluídas por semana (últimas _THROUGHPUT_WEEKS).
+    tp_start = _week_start(today) - timedelta(days=(_THROUGHPUT_WEEKS - 1) * 7)
+    week_counts: dict[date, int] = {}
+    wk = tp_start
+    while wk <= today:
+        week_counts[wk] = 0
+        wk += timedelta(days=7)
+    for p in pont:
+        ws = _week_start(p["done_d"])
+        if ws in week_counts:
+            week_counts[ws] += 1
+    throughput = [{"week_start": w, "done": week_counts[w]} for w in sorted(week_counts)]
+
+    # 4) Tempo de ciclo: durações (horas) das pontuais concluídas (_CYCLE_DAYS).
+    durations = [
+        round(float(p["hours"]), 2)
+        for p in pont
+        if p["hours"] is not None and p["hours"] >= 0
+    ]
+
+    # 5) Produtividade por dia da semana (últimas _WEEKDAY_WEEKS): recorrentes +
+    #    pontuais concluídas, somadas por dia da semana (índice domingo=0).
+    wd_start = today - timedelta(days=_WEEKDAY_WEEKS * 7 - 1)
+    weekday = [0] * 7
+    for dd, n in done_by_date.items():
+        if wd_start <= dd <= today:
+            weekday[_sun_index(dd)] += n
+    for p in pont:
+        if wd_start <= p["done_d"] <= today:
+            weekday[_sun_index(p["done_d"])] += 1
+
+    return {
+        "heatmap": {"start": heat_start, "today": today, "days": heat_days},
+        "task_adherence": {"window_days": _ADHERENCE_DAYS, "tasks": task_rows},
+        "throughput": {"weeks": throughput},
+        "cycle_time": {"durations_h": durations},
+        "weekday": {"counts": weekday},
+        "backlog": {
+            "todo": backlog["todo"],
+            "in_progress": backlog["in_progress"],
+            "blocked": backlog["blocked"],
+            "overdue": backlog["overdue"],
+            "aging": {
+                "new": backlog["age_new"],
+                "mid": backlog["age_mid"],
+                "old": backlog["age_old"],
+            },
         },
     }
 
