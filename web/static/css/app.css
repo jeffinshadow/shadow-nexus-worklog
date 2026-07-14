@@ -225,6 +225,13 @@ button.column-toggle { display: none; }
 .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap); }
 .chart-grid .span-all { grid-column: 1 / -1; }
 
+/* Pontuais · fluxo: os três cards têm a mesma altura; o gráfico de barras é
+   ancorado no rodapé do card (margin-top:auto) para que as linhas de base
+   fiquem ALINHADAS mesmo quando um card tem cabeçalho a mais (a mediana). */
+.fluxo-grid > .chart-card { display: flex; flex-direction: column; }
+.fluxo-grid .fluxo-body { flex: 1 1 auto; display: flex; flex-direction: column; }
+.fluxo-grid .fluxo-body > .chart-svg { margin-top: auto; }
+
 /* Consistência: heatmap (pequeno, 4 semanas) + tendência ao lado, ranking com
    largura reduzida. align-items:flex-start evita esticar os cards curtos até a
    altura do ranking (que era o vazio embaixo do heatmap/tendência). */
@@ -241,8 +248,11 @@ button.column-toggle { display: none; }
 /* Gráficos em tamanho natural e centrados: mantém os rótulos legíveis (não
    escala a fonte junto do SVG) mesmo quando o card é mais largo. */
 .chart-svg.heatmap { width: auto; max-width: 100%; }
+/* Tendência: ocupa a largura do card e, com o viewBox mais alto, preenche a
+   altura (deixa de flutuar no meio da célula). */
+.consist-grid > .trend > :last-child { justify-content: stretch; }
 .trend-wrap { width: 100%; }
-.consist-grid .trend .chart-svg { max-width: 320px; margin: 0 auto; }
+.consist-grid .trend .chart-svg { width: 100%; max-width: 100%; }
 .heat-legend { justify-content: center; }
 @media (max-width: 900px) {
   .consist-grid > .heat,

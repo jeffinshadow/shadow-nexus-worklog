@@ -31,11 +31,11 @@ export async function mount(root, opts = {}) {
       ),
     ]),
     section("Pontuais · fluxo", [
-      grid([
+      h("div", { class: "chart-grid fluxo-grid" },
         chartCard("Concluídas por semana", "Vazão das últimas 4 semanas.", throughput(a.throughput)),
         chartCard("Tempo de conclusão", "Da criação até concluída (últimos 90 dias).", cycleTime(a.cycle_time)),
         chartCard("Por dia da semana", "Conclusões (recorrentes + pontuais) nas últimas 8 semanas.", weekdayChart(a.weekday)),
-      ]),
+      ),
     ]),
     section("Backlog · saúde", [
       backlogHealth(a.backlog),
@@ -245,7 +245,7 @@ function weeklyTrend(hm) {
     const slots = chunk.reduce((a, d) => a + d.slots, 0);
     weeks.push({ date: chunk[0].date, pct: slots ? (done / slots) * 100 : 0, slots });
   }
-  const W = 260, H = 120, padL = 26, padR = 10, padT = 12, padB = 22;
+  const W = 300, H = 176, padL = 30, padR = 12, padT = 16, padB = 28;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = weeks.length;
   const x = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
@@ -326,11 +326,13 @@ function verticalBars(items, opts = {}) {
   if (!items.length) return emptyBox(opts.emptyMsg || "sem dados");
   const max = Math.max(1, ...items.map((it) => it.value));
   const n = items.length;
-  const W = 300, plotH = 104, padT = 16, padB = 26, padL = 8, padR = 8;
+  const W = 300, plotH = 128, padT = 16, padB = 28, padL = 8, padR = 8;
   const H = padT + plotH + padB;
   const plotW = W - padL - padR;
   const slot = plotW / n;
-  const barW = Math.min(opts.maxBarW || 46, slot * 0.62);
+  // Largura de barra FIXA (mesma em todos os gráficos da linha), distribuída
+  // pelos slots para preencher a largura. Só encolhe se houver barras demais.
+  const barW = Math.min(32, slot * 0.8);
   const baseY = padT + plotH;
   const s = svg(W, H, "chart-svg");
   items.forEach((it, i) => {
@@ -359,8 +361,8 @@ function throughput(tp) {
     title: `semana de ${formatDate(w.week_start)}: ${w.done} concluída(s)`,
   }));
   const chart = verticalBars(items, { color: "var(--primary)" });
-  if (total === 0) return h("div", {}, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 4 semanas" }));
-  return chart;
+  if (total === 0) return h("div", { class: "fluxo-body" }, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 4 semanas" }));
+  return h("div", { class: "fluxo-body" }, chart);
 }
 
 // ---------------------------------------------------------------- cycle time --
@@ -398,7 +400,7 @@ function cycleTime(ct) {
   const items = CYCLE_BUCKETS.map((b, i) => ({
     value: counts[i], label: b.label, title: `${b.label}: ${counts[i]} tarefa(s)`,
   }));
-  return h("div", {},
+  return h("div", { class: "fluxo-body" },
     h("div", { class: "stat-inline" },
       h("span", { class: "stat-big", text: fmtDuration(med) }),
       h("span", { class: "stat-cap", text: `mediana · ${durs.length} concluída(s)` })),
@@ -418,7 +420,7 @@ function weekdayChart(wd) {
     value: counts[i], label: WEEKDAYS[i], highlight: counts[i] === max && counts[i] > 0,
     title: `${WEEKDAYS[i]}: ${counts[i]} conclusão(ões)`,
   }));
-  return verticalBars(items);
+  return h("div", { class: "fluxo-body" }, verticalBars(items));
 }
 
 // -------------------------------------------------------------- backlog saúde --
