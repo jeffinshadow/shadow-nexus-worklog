@@ -171,9 +171,9 @@ def get_dashboard(user_id: int) -> dict:
 
 
 # Janelas dos gráficos analíticos (em dias / semanas, sempre no fuso do app).
-_HEAT_WEEKS = 12         # calendário de aderência das recorrentes
+_HEAT_WEEKS = 8          # série diária: calendário mostra 4 sem., tendência 8 sem.
 _ADHERENCE_DAYS = 30     # ranking de aderência por tarefa
-_THROUGHPUT_WEEKS = 12   # vazão semanal de pontuais
+_THROUGHPUT_WEEKS = 4    # vazão semanal de pontuais
 _CYCLE_DAYS = 90         # tempo de ciclo das pontuais
 _WEEKDAY_WEEKS = 8       # produtividade por dia da semana
 _STREAK_LOOKBACK = 120   # histórico p/ calcular a sequência (streak) atual

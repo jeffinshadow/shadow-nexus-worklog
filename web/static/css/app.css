@@ -190,14 +190,19 @@ button.column-toggle { display: none; }
 .dash-group { margin-bottom: 16px; }
 .dash-group-title { font-size: 1rem; font-weight: 600; margin: 0 0 10px; }
 
-/* Desktop: as duas ilhas (recorrentes / pontuais) na mesma linha. No mobile
-   empilham (uma coluna) como antes. */
+/* Desktop: as duas ilhas (recorrentes / pontuais) na mesma linha, colunas de
+   mesma altura e todos os 6 tiles do mesmo tamanho (os de razão têm barra e
+   seriam mais altos que os de contagem). No mobile empilham como antes. */
 .overview-grid { display: grid; gap: var(--gap); }
 .overview-grid .dash-group { margin-bottom: 0; }
-@media (min-width: 900px) { .overview-grid { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 900px) {
+  .overview-grid { grid-template-columns: 1fr 1fr; align-items: stretch; }
+  .overview-grid > .dash-group { display: flex; flex-direction: column; }
+  .overview-grid .kpi-row { flex: 1 1 auto; }
+}
 
 .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
-.kpi-tile { background: var(--surface-container); border-radius: var(--radius-m); padding: 12px 14px; }
+.kpi-tile { background: var(--surface-container); border-radius: var(--radius-m); padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; }
 .kpi-label { display: block; font-size: 0.8rem; color: var(--on-surface-variant); }
 .kpi-value { display: block; font-size: 1.6rem; font-weight: 700; line-height: 1.15; margin: 4px 0 8px; }
 .kpi-value.muted { color: var(--on-surface-variant); font-weight: 600; }
@@ -220,12 +225,22 @@ button.column-toggle { display: none; }
 .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap); }
 .chart-grid .span-all { grid-column: 1 / -1; }
 
-/* Consistência: heatmap + tendência compactos lado a lado, ranking preenche o resto */
-.consist-grid { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: stretch; }
-.consist-grid > .compact { flex: 1 1 240px; max-width: 320px; min-width: 0; }
-.consist-grid > .grow { flex: 3 1 320px; min-width: 0; }
-@media (max-width: 640px) {
-  .consist-grid > .compact { max-width: none; }
+/* Consistência: heatmap (pequeno, 4 semanas) + tendência ao lado, ranking com
+   largura reduzida. align-items:flex-start evita esticar os cards curtos até a
+   altura do ranking (que era o vazio embaixo do heatmap/tendência). */
+.consist-grid { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: flex-start; }
+.consist-grid > .heat  { flex: 0 1 260px; min-width: 0; }
+.consist-grid > .trend { flex: 1 1 320px; min-width: 0; max-width: 520px; }
+.consist-grid > .grow  { flex: 1.4 1 360px; min-width: 0; max-width: 780px; }
+/* Gráficos em tamanho natural e centrados: mantém os rótulos legíveis (não
+   escala a fonte junto do SVG) mesmo quando o card é mais largo. */
+.chart-svg.heatmap { width: auto; max-width: 100%; margin: 0 auto; }
+.consist-grid .trend .chart-svg { max-width: 320px; margin: 0 auto; }
+.heat-legend { justify-content: center; }
+@media (max-width: 900px) {
+  .consist-grid > .heat,
+  .consist-grid > .trend,
+  .consist-grid > .grow { flex-basis: 100%; max-width: none; }
 }
 
 .chart-card { background: var(--surface-container); border-radius: var(--radius-m); padding: 14px; }

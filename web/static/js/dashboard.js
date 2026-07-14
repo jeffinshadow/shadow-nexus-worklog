@@ -25,14 +25,14 @@ export async function mount(root, opts = {}) {
     ]),
     section("Recorrentes · consistência", [
       h("div", { class: "consist-grid" },
-        chartCard("Aderência diária", "Últimas 12 semanas — % das recorrentes vigentes concluídas em cada dia.", heatmap(a.heatmap), "compact"),
-        chartCard("Tendência semanal", "% de aderência agregada por semana.", weeklyTrend(a.heatmap), "compact"),
+        chartCard("Aderência diária", "Últimas 4 semanas — % concluído por dia.", heatmap(a.heatmap), "compact heat"),
+        chartCard("Tendência semanal", "Últimas 8 semanas — % de aderência.", weeklyTrend(a.heatmap), "compact trend"),
         chartCard("Aderência por tarefa", "Últimos 30 dias — dias concluídos ÷ dias vigentes.", taskRanking(a.task_adherence), "grow"),
       ),
     ]),
     section("Pontuais · fluxo", [
       grid([
-        chartCard("Concluídas por semana", "Vazão das últimas 12 semanas.", throughput(a.throughput)),
+        chartCard("Concluídas por semana", "Vazão das últimas 4 semanas.", throughput(a.throughput)),
         chartCard("Tempo de conclusão", "Da criação até concluída (últimos 90 dias).", cycleTime(a.cycle_time)),
         chartCard("Por dia da semana", "Conclusões (recorrentes + pontuais) nas últimas 8 semanas.", weekdayChart(a.weekday)),
       ]),
@@ -170,14 +170,23 @@ function heatColor(d) {
 function heatmap(hm) {
   if (!hm || !hm.days || !hm.days.length || hm.days.every((d) => d.slots === 0))
     return emptyBox("sem recorrentes ainda");
-  const days = hm.days;
-  const start = parseISO(hm.start);
+  // A série vem com 8 semanas (para a tendência); o calendário mostra só as 4
+  // últimas. Recorta em múltiplos de 7 (heat_start é domingo) p/ manter colunas.
+  const HEAT_WEEKS = 4;
+  let days = hm.days;
+  const totalCols = Math.ceil(days.length / 7);
+  if (totalCols > HEAT_WEEKS) days = days.slice((totalCols - HEAT_WEEKS) * 7);
+  const start = parseISO(days[0].date);
   const cols = Math.ceil(days.length / 7);
-  const cell = 10, gap = 2, step = cell + gap;
-  const padL = 22, padT = 14;
+  const cell = 24, gap = 3, step = cell + gap;
+  const padL = 26, padT = 16;
   const w = padL + cols * step + 2;
   const height = padT + 7 * step + 2;
   const s = svg(w, height, "chart-svg heatmap");
+  // Renderiza em tamanho natural (não estica): mantém os rótulos legíveis e
+  // coerentes com os outros gráficos, em vez de escalar a fonte junto do SVG.
+  s.setAttribute("width", w);
+  s.setAttribute("height", height);
   s.setAttribute("role", "img");
   s.setAttribute("aria-label", "Calendário de aderência das tarefas recorrentes");
 
@@ -338,14 +347,13 @@ function throughput(tp) {
   const weeks = (tp && tp.weeks) || [];
   if (!weeks.length) return emptyBox("sem dados");
   const total = weeks.reduce((a, w) => a + w.done, 0);
-  const items = weeks.map((w, i) => ({
+  const items = weeks.map((w) => ({
     value: w.done,
-    // rótulo só a cada 2 semanas para não poluir
-    label: i % 2 === weeks.length % 2 ? formatDate(w.week_start) : "",
+    label: formatDate(w.week_start),
     title: `semana de ${formatDate(w.week_start)}: ${w.done} concluída(s)`,
   }));
-  const chart = verticalBars(items, { barW: 16, gap: 6, color: "var(--primary)" });
-  if (total === 0) return h("div", {}, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 12 semanas" }));
+  const chart = verticalBars(items, { barW: 30, gap: 14, color: "var(--primary)" });
+  if (total === 0) return h("div", {}, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 4 semanas" }));
   return chart;
 }
 
@@ -397,9 +405,12 @@ function weekdayChart(wd) {
   const counts = (wd && wd.counts) || [];
   if (!counts.length || counts.every((c) => c === 0)) return emptyBox("sem conclusões nas últimas 8 semanas");
   const max = Math.max(...counts);
-  const items = counts.map((c, i) => ({
-    value: c, label: WEEKDAYS[i], highlight: c === max && c > 0,
-    title: `${WEEKDAYS[i]}: ${c} conclusão(ões)`,
+  // counts vem indexado por domingo=0..sábado=6; exibimos Seg→Dom (fim de
+  // semana no fim) para leitura de dia útil.
+  const ORDER = [1, 2, 3, 4, 5, 6, 0];
+  const items = ORDER.map((i) => ({
+    value: counts[i], label: WEEKDAYS[i], highlight: counts[i] === max && counts[i] > 0,
+    title: `${WEEKDAYS[i]}: ${counts[i]} conclusão(ões)`,
   }));
   return verticalBars(items, { barW: 24, gap: 8 });
 }
