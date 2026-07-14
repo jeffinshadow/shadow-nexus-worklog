@@ -145,6 +145,10 @@ button.column-toggle { display: none; }
   .column-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 }
 
+/* Rolagem das colunas sem barra visível (o scroll continua funcionando). */
+.column-body { scrollbar-width: none; -ms-overflow-style: none; }
+.column-body::-webkit-scrollbar { width: 0; height: 0; }
+
 /* Mobile: "Finalizadas" começa recolhida num dropdown (só o cabeçalho/contador
    aparece). O resto da rolagem no mobile continua sendo a da página. */
 @media (max-width: 900px) {
@@ -341,6 +345,9 @@ button.column-toggle { display: none; }
 
 /* ---- Relatorios ---- */
 .report-controls { display: flex; gap: var(--gap-s); align-items: end; margin-bottom: var(--gap); flex-wrap: wrap; }
+/* Sem a margem inferior dos campos aqui: senão, com align-items:end, os inputs
+   sobem var(--gap) e o botão (sem margem) fica desalinhado abaixo deles. */
+.report-controls .field { margin-bottom: 0; }
 .report-section { background: var(--surface-container); border-radius: var(--radius-m); padding: var(--gap); margin-bottom: var(--gap); }
 .report-section h3 { margin: 0 0 12px; }
 .report-section .sub { color: var(--on-surface-variant); font-size: 0.9rem; margin: 0 0 var(--gap); max-width: 60ch; }
