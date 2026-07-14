@@ -18,15 +18,17 @@ export async function mount(root, opts = {}) {
   clear(root);
   root.append(
     section("Visão geral", [
-      kpiGroup("Tarefas recorrentes", data.recurring, true),
-      kpiGroup("Pontuais concluídas", data.pontual, false),
+      h("div", { class: "overview-grid" },
+        kpiGroup("Tarefas recorrentes", data.recurring, true),
+        kpiGroup("Pontuais concluídas", data.pontual, false),
+      ),
     ]),
     section("Recorrentes · consistência", [
-      grid([
-        chartCard("Aderência diária", "Últimas 12 semanas — % das recorrentes vigentes concluídas em cada dia.", heatmap(a.heatmap), true),
-        chartCard("Tendência semanal", "% de aderência agregada por semana.", weeklyTrend(a.heatmap), true),
-        chartCard("Aderência por tarefa", "Últimos 30 dias — dias concluídos ÷ dias vigentes.", taskRanking(a.task_adherence), true),
-      ]),
+      h("div", { class: "consist-grid" },
+        chartCard("Aderência diária", "Últimas 12 semanas — % das recorrentes vigentes concluídas em cada dia.", heatmap(a.heatmap), "compact"),
+        chartCard("Tendência semanal", "% de aderência agregada por semana.", weeklyTrend(a.heatmap), "compact"),
+        chartCard("Aderência por tarefa", "Últimos 30 dias — dias concluídos ÷ dias vigentes.", taskRanking(a.task_adherence), "grow"),
+      ),
     ]),
     section("Pontuais · fluxo", [
       grid([
@@ -53,8 +55,8 @@ function grid(cards) {
   return h("div", { class: "chart-grid" }, ...cards);
 }
 
-function chartCard(title, sub, body, spanAll) {
-  return h("div", { class: "chart-card" + (spanAll ? " span-all" : "") },
+function chartCard(title, sub, body, extra) {
+  return h("div", { class: "chart-card" + (extra ? " " + extra : "") },
     h("h3", { class: "chart-title", text: title }),
     sub ? h("p", { class: "chart-sub", text: sub }) : null,
     body);
@@ -171,8 +173,8 @@ function heatmap(hm) {
   const days = hm.days;
   const start = parseISO(hm.start);
   const cols = Math.ceil(days.length / 7);
-  const cell = 12, gap = 3, step = cell + gap;
-  const padL = 26, padT = 16;
+  const cell = 10, gap = 2, step = cell + gap;
+  const padL = 22, padT = 14;
   const w = padL + cols * step + 2;
   const height = padT + 7 * step + 2;
   const s = svg(w, height, "chart-svg heatmap");
@@ -231,7 +233,7 @@ function weeklyTrend(hm) {
     const slots = chunk.reduce((a, d) => a + d.slots, 0);
     weeks.push({ date: chunk[0].date, pct: slots ? (done / slots) * 100 : 0, slots });
   }
-  const W = 320, H = 130, padL = 28, padR = 10, padT = 12, padB = 22;
+  const W = 260, H = 120, padL = 26, padR = 10, padT = 12, padB = 22;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = weeks.length;
   const x = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);

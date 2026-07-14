@@ -18,7 +18,9 @@ export async function mount(root, opts = {}) {
   clear(root);
   const daily = column("Tarefas Recorrentes Diárias", readOnly ? null : () => openRecurring(null));
   const wip = column("Tarefas Pontuais", readOnly ? null : () => openWorklog(null));
-  const done = column("Tarefas Finalizadas", null);
+  // "Finalizadas" é colapsável: no mobile fica oculta num dropdown por padrão
+  // (só o cabeçalho/contador aparece). No desktop o toggle some e a coluna rola.
+  const done = column("Tarefas Finalizadas", null, { collapsible: true, className: "column-done" });
   root.append(h("div", { class: "columns" }, daily.section, wip.section, done.section));
 
   async function refresh() {
@@ -202,12 +204,28 @@ export async function mount(root, opts = {}) {
   await refresh();
 }
 
-function column(title, onAdd) {
+function column(title, onAdd, opts = {}) {
   const count = h("span", { class: "count-badge" });
   const head = h("div", { class: "column-head" }, h("h2", { text: title }), count);
   if (onAdd)
     head.append(h("button", { class: "icon", title: "Adicionar", onClick: onAdd }, icon("edit")));
-  const body = h("div", {});
-  const section = h("section", { class: "column" }, head, body);
+  const body = h("div", { class: "column-body" });
+  const section = h("section", { class: "column" + (opts.className ? " " + opts.className : "") }, head, body);
+  if (opts.collapsible) {
+    const toggle = h(
+      "button",
+      {
+        class: "icon column-toggle",
+        title: "Mostrar/ocultar",
+        "aria-expanded": "false",
+        onClick: () => {
+          const open = section.classList.toggle("expanded");
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+        },
+      },
+      icon("chevron")
+    );
+    head.append(toggle);
+  }
   return { section, body, count };
 }
