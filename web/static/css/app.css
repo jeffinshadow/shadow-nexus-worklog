@@ -202,13 +202,13 @@ button.column-toggle { display: none; }
 }
 
 .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
-.kpi-tile { background: var(--surface-container); border-radius: var(--radius-m); padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; }
+.kpi-tile { background: var(--surface-container); border-radius: var(--radius-m); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
 .kpi-label { display: block; font-size: 0.8rem; color: var(--on-surface-variant); }
-.kpi-value { display: block; font-size: 1.6rem; font-weight: 700; line-height: 1.15; margin: 4px 0 8px; }
+.kpi-value { display: block; font-size: 1.6rem; font-weight: 700; line-height: 1.15; margin: 0; }
 .kpi-value.muted { color: var(--on-surface-variant); font-weight: 600; }
 .kpi-track { height: 8px; background: var(--surface-container-high); border-radius: 999px; overflow: hidden; }
 .kpi-fill { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
-.kpi-sub { display: block; font-size: 0.75rem; color: var(--on-surface-variant); margin-top: 8px; }
+.kpi-sub { display: block; font-size: 0.75rem; color: var(--on-surface-variant); margin: 0; }
 @media (max-width: 480px) {
   .kpi-row { gap: var(--gap-s); }
   .kpi-tile { padding: 12px; }
@@ -228,13 +228,20 @@ button.column-toggle { display: none; }
 /* Consistência: heatmap (pequeno, 4 semanas) + tendência ao lado, ranking com
    largura reduzida. align-items:flex-start evita esticar os cards curtos até a
    altura do ranking (que era o vazio embaixo do heatmap/tendência). */
-.consist-grid { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: flex-start; }
+.consist-grid { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: stretch; }
 .consist-grid > .heat  { flex: 0 1 260px; min-width: 0; }
 .consist-grid > .trend { flex: 1 1 320px; min-width: 0; max-width: 520px; }
 .consist-grid > .grow  { flex: 1.4 1 360px; min-width: 0; max-width: 780px; }
+/* heat/trend: título no topo e o gráfico centralizado no espaço restante, para
+   os cards curtos terem a MESMA altura do ranking sem sobrar vazio embaixo. */
+.consist-grid > .compact { display: flex; flex-direction: column; }
+.consist-grid > .compact > :last-child {
+  flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; align-items: center;
+}
 /* Gráficos em tamanho natural e centrados: mantém os rótulos legíveis (não
    escala a fonte junto do SVG) mesmo quando o card é mais largo. */
-.chart-svg.heatmap { width: auto; max-width: 100%; margin: 0 auto; }
+.chart-svg.heatmap { width: auto; max-width: 100%; }
+.trend-wrap { width: 100%; }
 .consist-grid .trend .chart-svg { max-width: 320px; margin: 0 auto; }
 .heat-legend { justify-content: center; }
 @media (max-width: 900px) {
@@ -303,7 +310,12 @@ button.column-toggle { display: none; }
 .stat-tile-label { display: block; font-size: 0.78rem; color: var(--on-surface-variant); margin-top: 2px; }
 .stat-tile.error .stat-tile-value { color: var(--error); }
 
-.stacked-bar { display: flex; height: 22px; border-radius: 999px; overflow: hidden; background: var(--surface); }
+.stacked-bar { display: flex; height: 30px; border-radius: 999px; overflow: hidden; background: var(--surface); }
+
+/* Backlog: os dois cards têm a mesma altura (grid) e o conteúdo curto (barra +
+   legenda) é distribuído para ocupar a célula em vez de ficar colado no topo. */
+.backlog-grid > .chart-card { display: flex; flex-direction: column; }
+.backlog-grid > .chart-card > :last-child { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
 .stacked-seg { display: block; height: 100%; }
 .bar-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 0.78rem; color: var(--on-surface-variant); }
 .bar-legend .item { display: inline-flex; align-items: center; gap: 6px; }

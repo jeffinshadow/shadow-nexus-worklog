@@ -160,7 +160,9 @@ function legendItem(label, count, color) {
 // ------------------------------------------------------ heatmap (calendário) --
 
 function heatColor(d) {
-  if (d.slots === 0) return { fill: "var(--surface-container)", op: 1 };
+  // Dia sem tarefa vigente (todos são <= hoje, pois a série vai só até hoje):
+  // quadrado vazio (só contorno), não um bloco cheio.
+  if (d.slots === 0) return { fill: "none", op: 1, empty: true };
   if (d.done === 0) return { fill: "var(--surface-container-high)", op: 1 };
   const frac = Math.min(1, d.done / d.slots);
   const op = frac >= 1 ? 1 : frac >= 0.67 ? 0.75 : frac >= 0.34 ? 0.5 : 0.28;
@@ -206,9 +208,10 @@ function heatmap(hm) {
 
   days.forEach((d, i) => {
     const col = Math.floor(i / 7), row = i % 7;
-    const { fill, op } = heatColor(d);
+    const { fill, op, empty } = heatColor(d);
     const r = rect(padL + col * step, padT + row * step, cell, cell, fill, { rx: 2 });
     if (op !== 1) r.style.opacity = op;
+    if (empty) { r.style.stroke = "var(--outline-variant)"; r.style.strokeWidth = "1"; }
     const label = formatDate(d.date);
     withTitle(r, d.slots === 0 ? `${label}: sem tarefas` : `${label}: ${d.done}/${d.slots} concluídas`);
     s.appendChild(r);
@@ -281,7 +284,7 @@ function weeklyTrend(hm) {
   for (const i of [0, Math.floor((n - 1) / 2), n - 1]) {
     s.appendChild(textEl(x(i), H - 6, formatDate(weeks[i].date), "chart-axis", "middle"));
   }
-  return s;
+  return h("div", { class: "trend-wrap" }, s);
 }
 
 // -------------------------------------------------- ranking por tarefa (HTML) --
@@ -316,27 +319,30 @@ function taskRanking(ta) {
 // ------------------------------------------------------ barras verticais base --
 
 // Desenha um gráfico de barras verticais a partir de itens {value, label, title,
-// highlight}. `unit` opcional aparece no topo da barra de maior valor.
+// highlight}. viewBox FIXO (mesmo W/H para todos): esticados para a largura do
+// card, os gráficos da linha "fluxo" ficam na MESMA escala e com a mesma linha
+// de base. As barras se distribuem para preencher a largura útil.
 function verticalBars(items, opts = {}) {
   if (!items.length) return emptyBox(opts.emptyMsg || "sem dados");
   const max = Math.max(1, ...items.map((it) => it.value));
   const n = items.length;
-  const barW = opts.barW || 26, gap = opts.gap || 10;
-  const padT = 14, padB = 22, padL = 6, padR = 6;
-  const plotH = 96;
-  const W = padL + padR + n * barW + (n - 1) * gap;
+  const W = 300, plotH = 104, padT = 16, padB = 26, padL = 8, padR = 8;
   const H = padT + plotH + padB;
+  const plotW = W - padL - padR;
+  const slot = plotW / n;
+  const barW = Math.min(opts.maxBarW || 46, slot * 0.62);
+  const baseY = padT + plotH;
   const s = svg(W, H, "chart-svg");
   items.forEach((it, i) => {
-    const x = padL + i * (barW + gap);
+    const cx = padL + slot * (i + 0.5);
     const bh = (it.value / max) * plotH;
-    const y = padT + plotH - bh;
+    const y = baseY - bh;
     const color = it.highlight ? "var(--primary)" : (opts.color || "var(--primary-container)");
-    const bar = rect(x, y, barW, bh, color, { rx: 3 });
+    const bar = rect(cx - barW / 2, y, barW, bh, color, { rx: 3 });
     withTitle(bar, it.title || `${it.label}: ${it.value}`);
     s.appendChild(bar);
-    if (it.value > 0) s.appendChild(textEl(x + barW / 2, y - 4, String(it.value), "chart-val", "middle"));
-    s.appendChild(textEl(x + barW / 2, H - 7, it.label, "chart-axis", "middle"));
+    if (it.value > 0) s.appendChild(textEl(cx, y - 5, String(it.value), "chart-val", "middle"));
+    s.appendChild(textEl(cx, H - 8, it.label, "chart-axis", "middle"));
   });
   return s;
 }
@@ -352,7 +358,7 @@ function throughput(tp) {
     label: formatDate(w.week_start),
     title: `semana de ${formatDate(w.week_start)}: ${w.done} concluída(s)`,
   }));
-  const chart = verticalBars(items, { barW: 30, gap: 14, color: "var(--primary)" });
+  const chart = verticalBars(items, { color: "var(--primary)" });
   if (total === 0) return h("div", {}, chart, h("p", { class: "chart-note", text: "nenhuma pontual concluída nas últimas 4 semanas" }));
   return chart;
 }
@@ -396,7 +402,7 @@ function cycleTime(ct) {
     h("div", { class: "stat-inline" },
       h("span", { class: "stat-big", text: fmtDuration(med) }),
       h("span", { class: "stat-cap", text: `mediana · ${durs.length} concluída(s)` })),
-    verticalBars(items, { barW: 30, gap: 12, color: "var(--primary-container)" }));
+    verticalBars(items, { color: "var(--primary-container)" }));
 }
 
 // ------------------------------------------------------------------- weekday --
@@ -412,7 +418,7 @@ function weekdayChart(wd) {
     value: counts[i], label: WEEKDAYS[i], highlight: counts[i] === max && counts[i] > 0,
     title: `${WEEKDAYS[i]}: ${counts[i]} conclusão(ões)`,
   }));
-  return verticalBars(items, { barW: 24, gap: 8 });
+  return verticalBars(items);
 }
 
 // -------------------------------------------------------------- backlog saúde --
@@ -449,10 +455,9 @@ function backlogHealth(b) {
 
   return h("div", {},
     tiles,
-    grid([
+    h("div", { class: "chart-grid backlog-grid" },
       chartCard("Backlog por status", "Tarefas em aberto agora.", statusBody),
-      chartCard("Envelhecimento", "Há quanto tempo as abertas existem.", agingBody),
-    ]));
+      chartCard("Envelhecimento", "Há quanto tempo as abertas existem.", agingBody)));
 }
 
 function statTile(label, value, tone) {
