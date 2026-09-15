@@ -160,8 +160,12 @@ A semana começa no **domingo** (agregações ajustadas no `services.py`).
 backend/  FastAPI (app/ + sql/)   — auth, CRUD, agregações, rotas admin
 web/      nginx + static/         — login, board, relatórios, dashboard, admin
 tunnel/   config de exemplo do cloudflared
+docs/     referência da API
 docker-compose.yml, .env.example, .gitignore
 ```
+
+A referência completa da API REST (`/api/*`) está em **[`docs/API.md`](docs/API.md)**
+— útil já que o Swagger/OpenAPI interativo é desabilitado de propósito.
 
 ## Notas
 
